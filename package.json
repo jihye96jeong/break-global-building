@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "WORLD BREAKER — 세계 건물 부수기. 2D arcade landmark-smashing game.",
+  "description": "WORLD BREAKER \u2014 \uc138\uacc4 \uac74\ubb3c \ubd80\uc218\uae30. 2D arcade landmark-smashing game.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/check-dist.mjs",
@@ -12,7 +12,8 @@
     "assets:generate": "node scripts/generate-assets.mjs",
     "assets:process": "node scripts/process-assets.mjs",
     "assets:validate": "node scripts/validate-assets.mjs",
-    "assets:preview": "node scripts/preview-assets.mjs"
+    "assets:preview": "node scripts/preview-assets.mjs",
+    "build:single": "npm run build && node scripts/build-single.mjs"
   },
   "engines": {
     "node": ">=20"

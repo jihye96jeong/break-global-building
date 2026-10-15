@@ -22,13 +22,17 @@ interface Ring { x: number; y: number; life: number; max: number; r: number; col
 interface Banner { text: string; sub?: string; life: number; max: number; color: string; size: number; }
 interface Ultimate { t: number; order: DestructibleTile[]; next: number; boomed: boolean; gained: number; }
 
+/** A single-file build (npm run build:single) embeds every image as a data URI here. */
+const assetUrl = (src: string) => (window as unknown as { __WB_ASSETS?: Record<string, string> }).__WB_ASSETS?.[src] ?? src;
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`${t('imageError')}: ${src}`));
-    img.src = src;
+    // never hang on "loading": a request that neither loads nor fails within 15 s is reported
+    const timer = window.setTimeout(() => reject(new Error(`${t('imageError')}: ${src} (timeout)`)), 15000);
+    img.onload = () => { window.clearTimeout(timer); resolve(img); };
+    img.onerror = () => { window.clearTimeout(timer); reject(new Error(`${t('imageError')}: ${src}`)); };
+    img.src = assetUrl(src);
   });
 }
 
@@ -197,7 +201,7 @@ export class Game {
     const [img, bg] = await Promise.all([this.image(s.buildingSrc), this.image(s.backgroundSrc)]);
     this.buildingImg = img;
     this.bg = bg;
-    $('matte').style.backgroundImage = `url("${s.backgroundSrc}")`;
+    $('matte').style.backgroundImage = `url("${assetUrl(s.backgroundSrc)}")`;
     this.debris.clear();
     this.trails = []; this.rings = []; this.slashes = []; this.banners = []; this.ult = null;
     this.player.reset(VIEW_W / 2);
