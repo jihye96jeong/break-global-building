@@ -17,6 +17,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const STEP = 1 / 60;
 
 interface Trail { x0: number; y0: number; x1: number; y1: number; life: number; }
+interface Slash { x: number; y: number; dir: 1 | -1; life: number; }
 interface Ring { x: number; y: number; life: number; max: number; r: number; color: string; }
 interface Banner { text: string; sub?: string; life: number; max: number; color: string; size: number; }
 interface Ultimate { t: number; order: DestructibleTile[]; next: number; boomed: boolean; gained: number; }
@@ -68,6 +69,7 @@ export class Game {
   private shake = { ms: 0, mag: 0 };
   private trails: Trail[] = [];
   private rings: Ring[] = [];
+  private slashes: Slash[] = [];
   private banners: Banner[] = [];
   private ult: Ultimate | null = null;
   private stageMs = 0;
@@ -163,6 +165,7 @@ export class Game {
     this.input.bindButton($('btn-attack'), 'attack');
     this.input.bindButton($('btn-ult'), 'ultimate');
     this.input.bindButton($('btn-guard'), 'guard');
+    this.input.bindButton($('btn-jump'), 'jump');
     // keyboard shortcuts on overlays
     addEventListener('keydown', (e) => {
       if (e.code !== 'Enter' && e.code !== 'Space') return;
@@ -196,7 +199,7 @@ export class Game {
     this.bg = bg;
     $('matte').style.backgroundImage = `url("${s.backgroundSrc}")`;
     this.debris.clear();
-    this.trails = []; this.rings = []; this.banners = []; this.ult = null;
+    this.trails = []; this.rings = []; this.slashes = []; this.banners = []; this.ult = null;
     this.player.reset(VIEW_W / 2);
     this.spawnBuilding(0, false);
     this.guard = C.guardMax;
@@ -340,12 +343,17 @@ export class Game {
           this.player.move(this.player.hurtMs > 0 ? 0 : dir, dt);
           const wantAttack = this.input.consume('attack') || this.input.held('attack');
           if (wantAttack && this.player.canAttack()) this.attack();
+          if (this.input.consume('jump') && this.player.jump()) this.audio.play('swing');
           if (this.input.consume('ultimate')) this.startUltimate();
           if (this.input.consume('guard')) this.doGuard();
         } else {
           this.input.clearPresses();
           this.player.move(0, dt);
         }
+        // gravity; jumping into the building's underside stops the hero there
+        const p = this.player;
+        const under = b.undersideAt(p.x - 12, p.x + 12);
+        p.physics(dt, under === -Infinity ? Infinity : GROUND_Y - HERO_H - under - 2);
         this.player.tick(ms);
         b.update(ms);
         for (const t of b.model.tick(ms)) this.breakTile(t, 'chain');
@@ -361,6 +369,12 @@ export class Game {
           const cx = Math.max(hx - 13, Math.min(hx + 13, h.x)), cy = Math.max(top, Math.min(bottom, h.y));
           if ((cx - h.x) ** 2 + (cy - h.y) ** 2 > h.r * h.r) continue;
           if (this.stageCleared) break;
+          if (this.player.guardMs > 0) { // ↓ guard knocks falling stones away
+            h.vy = -420; h.vx = (h.x >= hx ? 1 : -1) * 260; h.age = -1; // harmless while it flies off
+            this.audio.play('crack');
+            this.debris.popup(h.x, h.y - 10, 'CLANG!', 20, '#8ff0ff');
+            continue;
+          }
           if (this.score.takeHit(now)) {
             h.dead = true;
             this.player.hurt(h.x);
@@ -406,6 +420,8 @@ export class Game {
     if (this.shake.ms > 0) this.shake.ms -= ms;
     for (const tr of this.trails) tr.life -= dt;
     this.trails = this.trails.filter((t) => t.life > 0);
+    for (const sl of this.slashes) sl.life -= dt;
+    this.slashes = this.slashes.filter((s) => s.life > 0);
     for (const r of this.rings) r.life -= dt;
     this.rings = this.rings.filter((r) => r.life > 0);
     for (const bn of this.banners) bn.life -= dt;
@@ -457,10 +473,9 @@ export class Game {
     this.guard -= C.guardCost;
     this.haltMs = Math.max(this.haltMs, C.guardHaltMs);
     b.offsetY -= C.guardPush;
-    this.player.guardMs = 320;
-    const by = Math.min(b.bottomY(), GROUND_Y - HERO_H - 10);
+    this.player.guardMs = C.guardWindowMs;
+    const by = Math.min(b.bottomY(), this.player.headY - 10);
     this.rings.push({ x: this.player.x, y: by, life: 0.35, max: 0.35, r: 70, color: '#8ff0ff' });
-    this.trails.push({ x0: this.player.x, y0: GROUND_Y - HERO_H, x1: this.player.x, y1: by, life: 0.16 });
     this.addShake(4, 120);
     this.audio.play('hit', { pitch: 0.6 });
     this.debris.popup(this.player.x, by + 30, 'HALT!', 22, '#8ff0ff');
@@ -472,10 +487,12 @@ export class Game {
     const p = this.player;
     if (this.enterMs > 0) return;
     p.startAttack();
-    const target = b.model.pickTarget(p.x, b.tileWorldX, C.attackRangeX);
+    // the sword only reaches just above the head: jump to hit a high building
+    const head = p.headY;
+    this.slashes.push({ x: p.x, y: head, dir: p.facing, life: 0.16 });
+    const target = b.pieceIn(p.x - C.swordReachX, head - C.swordReachUp, p.x + C.swordReachX, head + 12, p.x);
     if (!target) { // whiff: no points, no gauge
       this.audio.play('swing');
-      this.trails.push({ x0: p.x, y0: GROUND_Y - HERO_H, x1: p.x + p.facing * 24, y1: GROUND_Y - HERO_H - 46, life: 0.12 });
       return;
     }
     const tx = b.tileWorldX(target), ty = b.tileWorldY(target);
@@ -488,8 +505,6 @@ export class Game {
     const pts = this.score.registerHit(this.time, destroyed, this.stages.current.scoreMultiplier, this.stages.current.gaugeGain);
     this.hitStopMs = C.hitStopMs;
     this.addShake(destroyed ? 5 : 3, 100);
-    const f = p.fist;
-    this.trails.push({ x0: f.x, y0: f.y, x1: tx, y1: ty, life: 0.16 });
     this.rings.push({ x: tx, y: ty, life: 0.22, max: 0.22, r: 30, color: '#bfe3ff' });
     this.audio.play('hit', { pitch: 1 + Math.min(this.score.combo, 16) * 0.03 });
     if (destroyed) {
@@ -697,6 +712,19 @@ export class Game {
       ctx.beginPath(); ctx.moveTo(t.x0, t.y0); ctx.lineTo(t.x1, t.y1); ctx.stroke();
       ctx.strokeStyle = `rgba(235,248,255,${a})`; ctx.lineWidth = 4 * a;
       ctx.beginPath(); ctx.moveTo(t.x0, t.y0); ctx.lineTo(t.x1, t.y1); ctx.stroke();
+    }
+    for (const sl of this.slashes) {
+      // white crescent sweeping over the head
+      const k = 1 - sl.life / 0.16;
+      const cx = sl.x, cy = sl.y + 18, r = 62;
+      const a0 = sl.dir > 0 ? -Math.PI * 0.95 : -Math.PI * 0.05;
+      const sweep = Math.PI * 0.9 * Math.min(1, k * 1.6) * sl.dir;
+      ctx.globalAlpha = 1 - k * 0.7;
+      ctx.strokeStyle = 'rgba(160,210,255,.55)'; ctx.lineWidth = 16;
+      ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + sweep, sl.dir < 0); ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + sweep, sl.dir < 0); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
     for (const r of this.rings) {
       const k = 1 - r.life / r.max;

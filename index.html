@@ -38,10 +38,11 @@
 
       <!-- desktop: keyboard guide; touch devices: on-screen buttons -->
       <div id="keybar" class="hidden" aria-hidden="true">
-        <span><kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd> <span data-i18n="move"></span></span>
-        <span><kbd>Space</kbd> / <kbd>J</kbd> <span data-i18n="attack"></span></span>
-        <span><kbd>↓</kbd> / <kbd>S</kbd> <span data-i18n="guardKey"></span></span>
-        <span class="kb-ult"><kbd>K</kbd> BREAK!</span>
+        <span><kbd>←</kbd><kbd>→</kbd> <span data-i18n="move"></span></span>
+        <span><kbd>↑</kbd> <span data-i18n="jump"></span></span>
+        <span><kbd>↓</kbd> <span data-i18n="guardKey"></span></span>
+        <span><kbd>Z</kbd> <span data-i18n="attack"></span></span>
+        <span class="kb-ult"><kbd>X</kbd> <span data-i18n="ultimate"></span></span>
         <span><kbd>Esc</kbd> <span data-i18n="pause"></span></span>
       </div>
       <div id="controls" class="hidden">
@@ -51,6 +52,7 @@
           <button class="ctl ctl-guard" id="btn-guard" data-i18n-aria="guardKey">▼</button>
         </div>
         <div class="ctl-group">
+          <button class="ctl ctl-jump" id="btn-jump" data-i18n-aria="jump">▲</button>
           <button class="ctl ctl-attack" id="btn-attack" data-i18n="attack"></button>
           <button class="ctl ctl-ult" id="btn-ult" aria-label="BREAK!" disabled>BREAK!</button>
         </div>
@@ -76,10 +78,11 @@
         <div class="panel">
           <h2 data-i18n="help"></h2>
           <table class="keys">
-            <tr><th data-i18n="move"></th><td><kbd>←</kbd><kbd>→</kbd> <span data-i18n="or"></span> <kbd>A</kbd><kbd>D</kbd></td><td data-i18n="touchMove"></td></tr>
-            <tr><th data-i18n="attack"></th><td><kbd>Space</kbd> <span data-i18n="or"></span> <kbd>J</kbd> (<span data-i18n="holdRepeat"></span>)</td><td data-i18n="touchAttack"></td></tr>
-            <tr><th data-i18n="guardKey"></th><td><kbd>↓</kbd> <span data-i18n="or"></span> <kbd>S</kbd></td><td data-i18n="touchGuard"></td></tr>
-            <tr><th data-i18n="ultimate"></th><td><kbd>K</kbd> (<span data-i18n="gaugeFull"></span>)</td><td data-i18n="touchUlt"></td></tr>
+            <tr><th data-i18n="move"></th><td><kbd>←</kbd><kbd>→</kbd></td><td data-i18n="touchMove"></td></tr>
+            <tr><th data-i18n="jump"></th><td><kbd>↑</kbd></td><td>▲</td></tr>
+            <tr><th data-i18n="guardKey"></th><td><kbd>↓</kbd></td><td>▼</td></tr>
+            <tr><th data-i18n="attack"></th><td><kbd>Z</kbd> (<span data-i18n="holdRepeat"></span>)</td><td data-i18n="touchAttack"></td></tr>
+            <tr><th data-i18n="ultimate"></th><td><kbd>X</kbd> (<span data-i18n="gaugeFull"></span>)</td><td data-i18n="touchUlt"></td></tr>
             <tr><th data-i18n="pause"></th><td><kbd>Esc</kbd> <span data-i18n="or"></span> <kbd>P</kbd></td><td data-i18n="touchPause"></td></tr>
           </table>
           <ul class="rules">

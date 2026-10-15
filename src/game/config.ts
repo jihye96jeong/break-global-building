@@ -16,6 +16,12 @@ export const GAME_CONFIG = {
   playerSpeed: 255, // logical px/sec
   attackCooldownMs: 175,
   attackRangeX: 85,
+  // sword: hits what is just above the hero's head (jump to reach a high building)
+  swordReachX: 60,
+  swordReachUp: 80,
+  jumpVelocity: 860, // px/s up
+  jumpGravity: 1800, // px/s² → apex ≈ 205 px
+  guardWindowMs: 450, // ↓ also knocks falling stones away for this long
   tileBaseHP: 1,
   successfulHitScore: 100,
   damageOnlyScore: 20,
@@ -31,7 +37,7 @@ export const GAME_CONFIG = {
   buildingBonus: 300,
   // GUARD (↓): halts the sinking building for a moment
   guardMax: 100,
-  guardCost: 35,
+  guardCost: 30,
   guardRegenPerSec: 12,
   guardHaltMs: 1200,
   guardPush: 18,

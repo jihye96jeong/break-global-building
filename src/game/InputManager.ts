@@ -1,9 +1,12 @@
 // Keyboard + pointer (touch/mouse) unified. Held state for movement/attack, edge-triggered for ultimate/pause.
-export type Action = 'left' | 'right' | 'attack' | 'ultimate' | 'pause' | 'guard';
+export type Action = 'left' | 'right' | 'attack' | 'ultimate' | 'pause' | 'guard' | 'jump';
 
+// The classic 키루비루 layout (← → move, ↑ jump, ↓ guard, Z attack, X special); WASD/J/K as aliases.
 const KEYMAP: Record<string, Action> = {
-  ArrowDown: 'guard', KeyS: 'guard', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
-  Space: 'attack', KeyJ: 'attack', KeyK: 'ultimate', Escape: 'pause', KeyP: 'pause',
+  ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
+  ArrowUp: 'jump', KeyW: 'jump', ArrowDown: 'guard', KeyS: 'guard',
+  KeyZ: 'attack', KeyJ: 'attack', KeyX: 'ultimate', KeyK: 'ultimate',
+  Escape: 'pause', KeyP: 'pause',
 };
 
 export class InputManager {

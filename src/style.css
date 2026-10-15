@@ -93,14 +93,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .ctl-group { display: flex; gap: calc(14 * var(--u)); height: 100%; pointer-events: auto; }
 .ctl-group .ctl { width: calc(150 * var(--u)); }
+.ctl-group .ctl-jump { width: calc(110 * var(--u)); background: var(--cream); color: var(--ink); }
 .ctl-group .ctl-guard { width: calc(110 * var(--u)); background: #bff3ff; color: var(--ink); }
-.ctl-group .ctl-attack { width: calc(200 * var(--u)); }
-.ctl-group .ctl-ult { width: calc(160 * var(--u)); }
+.ctl-group .ctl-attack { width: calc(170 * var(--u)); }
+.ctl-group .ctl-ult { width: calc(150 * var(--u)); }
 @media not ((hover: hover) and (pointer: fine)) { #gauge { left: calc(370 * var(--u)); right: calc(420 * var(--u)); top: calc(700 * var(--u)); } }
 @media (hover: hover) and (pointer: fine) { #controls { display: none !important; } }
 @media not ((hover: hover) and (pointer: fine)) { #keybar { display: none !important; } }
 #keybar {
-  position: absolute; left: 0; right: 0; bottom: calc(26 * var(--u)); display: flex; justify-content: center; gap: calc(34 * var(--u));
+  position: absolute; left: 0; right: 0; bottom: calc(26 * var(--u)); display: flex; justify-content: center; gap: calc(30 * var(--u));
   font-size: calc(18 * var(--u)); font-weight: 800; color: #e9e4ff; pointer-events: none;
 }
 #keybar kbd { font-size: .9em; padding: .1em .45em; box-shadow: 0 .15em 0 var(--ink); }

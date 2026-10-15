@@ -6,6 +6,11 @@ export function comboMultiplier(combo: number) {
   return Math.min(1 + Math.floor((combo - 1) / 4) * 0.25, C.maxComboMultiplier);
 }
 
+/** Combos charge the special much faster: x1 under 5 hits, then +0.5 every 5 hits, up to x3. */
+export function comboGaugeBoost(combo: number) {
+  return Math.min(1 + Math.floor(Math.max(0, combo) / 5) * 0.5, 3);
+}
+
 export class ScoreManager {
   score = 0;
   combo = 0;
@@ -28,7 +33,7 @@ export class ScoreManager {
   registerHit(now: number, destroyed: boolean, stageMult: number, gaugeGain: number = C.ultimateGainPerHit): number {
     this.combo = now - this.lastHitAt <= C.comboWindowMs ? this.combo + 1 : 1;
     this.lastHitAt = now;
-    this.gauge = Math.min(C.ultimateMax, this.gauge + gaugeGain);
+    this.gauge = Math.min(C.ultimateMax, this.gauge + gaugeGain * comboGaugeBoost(this.combo));
     const pts = destroyed
       ? Math.round(C.successfulHitScore * comboMultiplier(this.combo) * stageMult)
       : Math.round(C.damageOnlyScore * stageMult);

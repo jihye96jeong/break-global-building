@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_CONFIG as C } from '../src/game/config';
-import { comboMultiplier, ScoreManager } from '../src/game/ScoreManager';
+import { comboGaugeBoost, comboMultiplier, ScoreManager } from '../src/game/ScoreManager';
 
 describe('score', () => {
   it('a broken piece is worth 100 x combo x stage multiplier', () => {
@@ -39,12 +39,19 @@ describe('super gauge', () => {
     expect(s.useUltimate()).toBe(false);
   });
 
-  it('13 hits fill the gauge', () => {
+  it('13 separate hits fill the gauge; combos fill it much faster', () => {
     const s = new ScoreManager();
-    for (let i = 0; i < 12; i++) s.registerHit(i, true, 1);
+    for (let i = 0; i < 12; i++) s.registerHit(i * 2000, true, 1); // 2 s apart: no combo
     expect(s.gaugeFull).toBe(false);
-    s.registerHit(13, true, 1);
+    s.registerHit(12 * 2000, true, 1);
     expect(s.gaugeFull).toBe(true);
+    const c = new ScoreManager();
+    let hits = 0;
+    while (!c.gaugeFull) c.registerHit(hits++ * 100, true, 1); // one long combo
+    expect(hits).toBeLessThan(13);
+    expect(comboGaugeBoost(4)).toBe(1);
+    expect(comboGaugeBoost(10)).toBe(2);
+    expect(comboGaugeBoost(99)).toBe(3);
   });
 });
 

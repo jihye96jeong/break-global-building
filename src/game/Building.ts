@@ -164,6 +164,38 @@ export class Building {
     return { ...p, y: p.y + this.offsetY };
   }
 
+  /** World rect of a piece's grid cell. */
+  tileRect(t: DestructibleTile) {
+    const { cols, rows } = this.model.grid;
+    return { x0: this.x + (t.col / cols) * this.w, x1: this.x + ((t.col + 1) / cols) * this.w,
+      y0: this.y + this.offsetY + (t.row / rows) * this.h, y1: this.y + this.offsetY + ((t.row + 1) / rows) * this.h };
+  }
+
+  /** Underside of the building between x0 and x1 (lowest standing piece there), or -Infinity if open sky. */
+  undersideAt(x0: number, x1: number) {
+    let y = -Infinity;
+    for (const t of this.model.tiles) {
+      if (!isStatic(t)) continue;
+      const r = this.tileRect(t);
+      if (r.x1 < x0 || r.x0 > x1) continue;
+      if (r.y1 > y) y = r.y1;
+    }
+    return y;
+  }
+
+  /** The lowest standing piece whose cell overlaps the rect, nearest to cx on ties. */
+  pieceIn(x0: number, y0: number, x1: number, y1: number, cx: number): DestructibleTile | null {
+    let best: DestructibleTile | null = null, bestRow = -1, bestDx = Infinity;
+    for (const t of this.model.tiles) {
+      if (t.state !== 'intact' && t.state !== 'damaged') continue;
+      const r = this.tileRect(t);
+      if (r.x1 < x0 || r.x0 > x1 || r.y1 < y0 || r.y0 > y1) continue;
+      const dx = Math.abs((r.x0 + r.x1) / 2 - cx);
+      if (t.row > bestRow || (t.row === bestRow && dx < bestDx)) { best = t; bestRow = t.row; bestDx = dx; }
+    }
+    return best;
+  }
+
   /** World y of the lowest standing piece's bottom edge, or -Infinity when nothing stands. */
   bottomY() {
     let row = -1;
