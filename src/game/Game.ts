@@ -799,9 +799,9 @@ export class Game {
     const text = t(fine ? 'tutorialKeys' : 'tutorialTouch');
     const w = ctx.measureText(text).width + 28;
     ctx.fillStyle = 'rgba(27,21,48,.82)';
-    ctx.beginPath(); ctx.roundRect(VIEW_W / 2 - w / 2, GROUND_Y - 160, w, 34, 17); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(VIEW_W / 2 - w / 2, 108, w, 34, 17); ctx.fill();
     ctx.fillStyle = '#fff';
-    ctx.fillText(text, VIEW_W / 2, GROUND_Y - 137);
+    ctx.fillText(text, VIEW_W / 2, 131);
     ctx.restore();
   }
 }
