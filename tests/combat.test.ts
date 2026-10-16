@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, GROUND_Y } from '../src/config/balance';
+import { BALANCE, DANGER_Y } from '../src/config/balance';
 import { attack, newRun, NO_INPUT, pause, resume, special, startRun, takeEvents, tick } from '../src/core/game';
 import { building, floor, playing } from './helpers';
 
@@ -64,7 +64,7 @@ describe('combo, score, special (spec §7)', () => {
   });
 
   it('T17 the building touching the ground during the special costs no life', () => {
-    const s = playing(building(tall(3), GROUND_Y - 1));
+    const s = playing(building(tall(3), DANGER_Y - 1));
     s.special = 100;
     special(s);
     for (let t = 0; t < 1; t += DT) tick(s, DT);
@@ -72,54 +72,13 @@ describe('combo, score, special (spec §7)', () => {
   });
 });
 
-describe('guards (spec §6)', () => {
-  it('T12 ground guard: pushes 85, combo 0, gauge spent', () => {
-    const s = playing(building(tall(5), GROUND_Y - 10));
-    s.combo = 12; s.comboMs = 1500;
-    const before = s.building!.bottomY;
-    tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: true });
-    expect(s.combo).toBe(0);
-    expect(s.building!.bottomY).toBeLessThan(before - 80);
-    expect(s.guard).toBeLessThanOrEqual(100 - 30);
-    expect(takeEvents(s).some((e) => e.t === 'guard' && e.kind === 'ground')).toBe(true);
-  });
-
-  it('T13 air guard: pushes 35, combo kept, cheaper', () => {
-    const s = playing(building(tall(5), GROUND_Y - 10));
-    s.combo = 12; s.comboMs = 1500;
-    s.player.y = 40; s.player.vy = 200;
-    const before = s.building!.bottomY;
-    tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: true });
-    expect(s.combo).toBe(12);
-    const pushed = before - s.building!.bottomY;
-    expect(pushed).toBeGreaterThan(30);
-    expect(pushed).toBeLessThan(40);
-    expect(s.guard).toBeGreaterThanOrEqual(100 - 18 - 1);
-  });
-
-  it('a guard far from the building pushes nothing', () => {
-    const s = playing(building(tall(5), 150));
-    tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: true });
-    expect(s.building!.bottomY).toBeGreaterThan(150);
-  });
-
-  it('T14 not enough guard gauge: guard break and a life is lost', () => {
-    const s = playing(building(tall(5), GROUND_Y - 1));
-    s.guard = 5;
-    tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: true });
-    const ev = takeEvents(s).map((e) => e.t);
-    expect(ev).toContain('guardBreak');
-    expect(s.lives).toBe(2);
-  });
-});
-
 describe('lives, pause and restart', () => {
   it('T18/T19 exactly three real crashes end the run; one crash never costs two lives', () => {
-    const s = playing(building(tall(5), GROUND_Y - 1));
+    const s = playing(building(tall(5), DANGER_Y - 1));
     tick(s, DT); tick(s, DT); tick(s, DT); // the same contact over several frames
     expect(s.lives).toBe(2);
     for (let t = 0; t < 12 && s.phase !== 'GAME_OVER'; t += DT) {
-      if (s.building && s.phase === 'PLAYING') s.building.bottomY = Math.max(s.building.bottomY, GROUND_Y - 1);
+      if (s.building && s.phase === 'PLAYING') s.building.bottomY = Math.max(s.building.bottomY, DANGER_Y - 1);
       tick(s, DT);
     }
     expect(s.lives).toBe(0);

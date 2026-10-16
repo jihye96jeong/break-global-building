@@ -71,7 +71,7 @@ export class Input {
     const p = this.pressed;
     const i: Intents = {
       left: this.held('left'), leftPressed: p.has('left'), right: this.held('right'), rightPressed: p.has('right'),
-      attack: this.held('attack'), attackPressed: p.has('attack'), jumpPressed: p.has('jump'),
+      attack: this.held('attack'), attackPressed: p.has('attack'), jump: this.held('jump'), jumpPressed: p.has('jump'),
       guard: this.held('guard'), guardPressed: p.has('guard'), specialPressed: p.has('special'), laneTo: this.laneTap,
     };
     p.clear();

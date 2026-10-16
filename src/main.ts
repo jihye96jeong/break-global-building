@@ -196,7 +196,7 @@ function onEvent(e: GameEvent) {
       shake(8, 260);
       break;
     }
-    case 'guard': {
+    case 'guardContact': {
       fx.ring(lx, 530 - BALANCE.heroHeight - p.y, 70, '#8ff0ff', 0.35, 6);
       if (e.kind === 'ground') { fx.ring(lx, 528, 120, '#bff3ff', 0.4, 8); shake(6, 160); }
       fx.pop(lx, 400, e.kind === 'air' ? 'AIR GUARD · COMBO KEEP' : 'GUARD!', e.kind === 'air' ? 18 : 22, '#8ff0ff');

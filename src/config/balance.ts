@@ -2,7 +2,13 @@
 // These are values defined for this HTML game, not measured from the original 斬るビル.
 
 export const WORLD_H = 600;
-export const GROUND_Y = 530; // ground / danger line: a building whose bottom reaches it crushes the hero
+export const GROUND_Y = 530; // the ground the hero stands on
+export const HERO_HEIGHT = 62;
+/**
+ * Danger line: a building whose underside reaches the standing hero's head crushes them (one life).
+ * v1 used the ground itself; v2 forbids the building visibly passing through the hero, so the line is the head.
+ */
+export const DANGER_Y = GROUND_Y - HERO_HEIGHT;
 export const SPAWN_BOTTOM_Y = 85; // a new building's lowest floor never appears higher than this
 /** …and never lower than this, so there is always room to react */
 export const SPAWN_BOTTOM_MAX = 240;
@@ -15,12 +21,10 @@ export const BALANCE = {
   // player
   laneMoveMs: 75, // lane slide animation
   laneRepeatMs: 130, // holding ←/→ moves one lane per this interval
-  attackIntervalMs: 100, // max 10 hits per second
+  attackIntervalMs: 95, // v2: ~10.5 hits per second
   attackAnimMs: 90,
-  attackBufferMs: 80, // a press during cooldown is remembered this long
-  jumpVelocity: 430, // units/s upward
-  gravity: 1250, // units/s²
-  heroHeight: 62,
+  attackBufferMs: 100, // a press during cooldown / guard hold is remembered this long
+  heroHeight: HERO_HEIGHT,
 
   // falling building
   baseFallSpeed: 115, // units/s at tier 1
@@ -39,10 +43,8 @@ export const BALANCE = {
   guardHoldDrainPerSec: 12,
   guardRegenPerSec: 18,
   guardRegenDelayMs: 250,
-  guardRange: 95, // guard only meets a building whose bottom is within this of the ground
-  guardContactCooldownMs: 280,
-  ground: { cost: 30, push: 85, speedFactor: 0.3, keepsCombo: false },
-  air: { cost: 18, push: 35, speedFactor: 0.55, keepsCombo: true, comboExtendMs: 450 },
+  ground: { cost: 30, speedFactor: 0.3, keepsCombo: false },
+  air: { cost: 18, speedFactor: 0.55, keepsCombo: true, comboExtendMs: 450 },
 
   // combo / score / special
   comboWindowMs: 1500,
