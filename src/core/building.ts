@@ -1,5 +1,6 @@
 // Falling buildings: floors × 3 lanes of HP. One lane reaching 0 destroys the whole floor (spec §5).
-import { BALANCE, LANES, SPAWN_BOTTOM_MAX, SPAWN_BOTTOM_Y, SPAWN_VISIBLE_SHARE, speedMultiplier, tierFor, type Tier } from '../config/balance';
+import { BALANCE, fallSpeedFor, GROUND_Y, HERO_HEIGHT, LANES, SPAWN_BOTTOM_MAX, SPAWN_BOTTOM_Y, tierFor, type Tier } from '../config/balance';
+import { GUARD_FEEL } from '../config/gameFeel';
 import { LANDMARKS, type Landmark } from '../config/landmarks';
 import { hashString, makeRng, type Rng } from './rng';
 
@@ -31,6 +32,8 @@ export interface FallingBuilding {
   velocityY: number;
   /** post-floor-break fast settle onto the blade (ms left) */
   settleMs?: number;
+  /** v4: crushed or specialled — no more collision, hits or guards against it */
+  collisionDisabled?: boolean;
   tier: number;
   elite: boolean;
   defeated: boolean;
@@ -119,8 +122,13 @@ export function layoutFloors(landmark: Landmark, count: number) {
 }
 
 /** Where a building of this height appears: mostly on screen, but never too close to the ground. */
-export function spawnBottom(totalHeight: number) {
-  return Math.min(SPAWN_BOTTOM_MAX, Math.max(SPAWN_BOTTOM_Y, 40 + totalHeight * SPAWN_VISIBLE_SHARE));
+/**
+ * v4 §4.3: spawn so the underside reaches a standing hero's guard blade after the tier's target time-to-contact
+ * (≈1.9 s at tier 1 down to ≈0.6 s at tier 6), kept on screen.
+ */
+export function spawnBottom(fallSpeed: number, ttc: number) {
+  const guardY = GROUND_Y - HERO_HEIGHT - GUARD_FEEL.guardReachAboveHead;
+  return Math.min(SPAWN_BOTTOM_MAX, Math.max(SPAWN_BOTTOM_Y, guardY - fallSpeed * ttc));
 }
 
 export function spawnBuilding(runSeed: number, index: number, destroyed: number, recent: string[]): FallingBuilding {
@@ -136,11 +144,11 @@ export function spawnBuilding(runSeed: number, index: number, destroyed: number,
     id: `b${index}-f${i + 1}`, ordinal: i + 1, hp: [...hps[i]] as [HP, HP, HP], initialHp: hps[i],
     height: l.height, v0: l.v0, v1: l.v1, segment: l.segment,
   }));
-  const speed = BALANCE.baseFallSpeed * speedMultiplier(destroyed);
+  const speed = fallSpeedFor(destroyed);
   return {
     id: `b${index}`, index, landmarkId: landmark.id, floors, originalFloorCount: count,
     totalHeight: floors.reduce((a, f) => a + f.height, 0),
-    bottomY: spawnBottom(floors.reduce((a, f) => a + f.height, 0)), baseSpeed: speed, velocityY: speed, tier: tier.tier, elite, defeated: false,
+    bottomY: spawnBottom(speed, tier.ttc), baseSpeed: speed, velocityY: speed, tier: tier.tier, elite, defeated: false,
   };
 }
 

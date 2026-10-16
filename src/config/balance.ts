@@ -12,8 +12,6 @@ export const DANGER_Y = GROUND_Y - HERO_HEIGHT;
 export const SPAWN_BOTTOM_Y = 85; // a new building's lowest floor never appears higher than this
 /** …and never lower than this, so there is always room to react */
 export const SPAWN_BOTTOM_MAX = 240;
-/** share of a new building that should be on screen when it appears */
-export const SPAWN_VISIBLE_SHARE = 0.8;
 export const LANES = 3;
 
 export const BALANCE = {
@@ -26,21 +24,18 @@ export const BALANCE = {
   heroHeight: HERO_HEIGHT,
 
   // falling building
-  baseFallSpeed: 115, // units/s at tier 1
-  hitPushUp: 7, // every successful hit nudges the building up
+  hitPushUp: 4, // v4: a small, non-cumulative kick per hit (the building stops, then falls back onto the blade)
   fallCapFactor: 1.12, // speed never exceeds base * tier * this
-  waveGapMs: 450, // name card between buildings
+  waveGapMs: 450, // name card between the first buildings…
+  waveGapFastMs: 300, // …then a short 0.25–0.40 s handover (v4 §4.4)
   countdownMs: 750, // 3 → 2 → 1
-  hitFreezeMs: 120,
+  damageImpactMs: 130, // v4 crush: impact (building collapses, collision off)…
+  damageRecoverMs: 270, // …then the hero is set back on the ground and the next building comes
   invulnAfterHitMs: 1250,
-  specialCutinMs: 650,
 
-  // guard
-  guardMax: 100,
-  guardRegenPerSec: 18,
-  guardRegenDelayMs: 250,
-  ground: { cost: 30, keepsCombo: false },
-  air: { cost: 18, keepsCombo: true, comboExtendMs: 450 },
+  // guard (v4: unlimited — no gauge, no cost, no cooldown)
+  ground: { keepsCombo: false },
+  air: { keepsCombo: true, comboExtendMs: 450 },
 
   // combo / score / special
   comboWindowMs: 1500,
@@ -71,7 +66,8 @@ export interface Tier {
   name: 'EASY' | 'NORMAL' | 'HARD' | 'EXPERT' | 'MASTER' | 'EXTREME';
   minDestroyed: number;
   floors: [number, number];
-  speed: number;
+  fallSpeed: number; // v4: absolute fall speed, wu/s (single source; never multiplied again)
+  ttc: number; // target seconds from spawn to first contact with the guard blade
   weights: [number, number, number]; // HP1 / HP2 / HP3
   weakChance: number; // chance a floor is forced to contain an HP1 lane
   sameWeakLaneAllowed: number; // chance 3 floors in a row may keep the same weak lane
@@ -79,19 +75,20 @@ export interface Tier {
 }
 
 export const TIERS: Tier[] = [
-  { tier: 1, name: 'EASY', minDestroyed: 0, floors: [3, 5], speed: 1.0, weights: [65, 30, 5], weakChance: 1.0, sameWeakLaneAllowed: 0, allHardAllowed: false },
-  { tier: 2, name: 'NORMAL', minDestroyed: 3, floors: [4, 7], speed: 1.2, weights: [50, 38, 12], weakChance: 0.9, sameWeakLaneAllowed: 0, allHardAllowed: false },
-  { tier: 3, name: 'HARD', minDestroyed: 6, floors: [6, 9], speed: 1.4, weights: [35, 45, 20], weakChance: 0.7, sameWeakLaneAllowed: 0, allHardAllowed: false },
-  { tier: 4, name: 'EXPERT', minDestroyed: 10, floors: [8, 12], speed: 1.7, weights: [25, 45, 30], weakChance: 0.45, sameWeakLaneAllowed: 0.25, allHardAllowed: false },
-  { tier: 5, name: 'MASTER', minDestroyed: 15, floors: [10, 15], speed: 2.0, weights: [20, 40, 40], weakChance: 0.3, sameWeakLaneAllowed: 0.25, allHardAllowed: false },
-  { tier: 6, name: 'EXTREME', minDestroyed: 20, floors: [12, 20], speed: 2.0, weights: [15, 35, 50], weakChance: 0.2, sameWeakLaneAllowed: 0.25, allHardAllowed: true },
+  { tier: 1, name: 'EASY', minDestroyed: 0, floors: [3, 5], fallSpeed: 190, ttc: 1.9, weights: [65, 30, 5], weakChance: 1.0, sameWeakLaneAllowed: 0, allHardAllowed: false },
+  { tier: 2, name: 'NORMAL', minDestroyed: 3, floors: [4, 7], fallSpeed: 240, ttc: 1.45, weights: [50, 38, 12], weakChance: 0.9, sameWeakLaneAllowed: 0, allHardAllowed: false },
+  { tier: 3, name: 'HARD', minDestroyed: 6, floors: [6, 9], fallSpeed: 300, ttc: 1.25, weights: [35, 45, 20], weakChance: 0.7, sameWeakLaneAllowed: 0, allHardAllowed: false },
+  { tier: 4, name: 'EXPERT', minDestroyed: 10, floors: [8, 12], fallSpeed: 390, ttc: 0.95, weights: [25, 45, 30], weakChance: 0.45, sameWeakLaneAllowed: 0.25, allHardAllowed: false },
+  { tier: 5, name: 'MASTER', minDestroyed: 15, floors: [10, 15], fallSpeed: 490, ttc: 0.78, weights: [20, 40, 40], weakChance: 0.3, sameWeakLaneAllowed: 0.25, allHardAllowed: false },
+  { tier: 6, name: 'EXTREME', minDestroyed: 20, floors: [12, 20], fallSpeed: 600, ttc: 0.62, weights: [15, 35, 50], weakChance: 0.2, sameWeakLaneAllowed: 0.25, allHardAllowed: true },
 ];
 
-/** Tier 6 speeds up from 2.0 by 0.05 every 3 buildings, capped at 2.4. */
-export function speedMultiplier(destroyed: number) {
+/** v4 absolute fall speed: 190 → 240 → 300 → 390 → 490 → 600 wu/s by tier; tier 6 adds 10 per building, capped at 650. */
+export const MAX_FALL_SPEED = 650;
+export function fallSpeedFor(destroyed: number) {
   const t = tierFor(destroyed);
-  if (t.tier < 6) return t.speed;
-  return 2.0 + Math.min(0.4, 0.05 * Math.floor((destroyed - 20) / 3));
+  if (t.tier < 6) return t.fallSpeed;
+  return Math.min(MAX_FALL_SPEED, t.fallSpeed + 10 * (destroyed - t.minDestroyed));
 }
 
 export function tierFor(destroyed: number): Tier {

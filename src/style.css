@@ -53,21 +53,27 @@ canvas#view { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 @keyframes hint-in { from { opacity: 0; transform: translate(-50%, -6px); } }
 
 /* ---------- bottom status ---------- */
-#status { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 16px; padding: 8px 14px 10px;
-  pointer-events: none; text-shadow: 0 2px 0 var(--ink); }
+#status { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 12px 16px; padding: 8px 14px 10px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom)); pointer-events: none; text-shadow: 0 2px 0 var(--ink); min-width: 0; }
 .gauge { display: flex; align-items: center; gap: 8px; flex: 0 1 300px; position: relative; }
 .g-lbl { font: 900 italic 14px "Arial Black", sans-serif; letter-spacing: .04em; }
-.guard .g-lbl { color: #8ff0ff; } .special .g-lbl { color: var(--gold); }
+.special .g-lbl { color: var(--gold); }
 .g-track { flex: 1; height: 16px; border-radius: 8px; background: rgba(10,8,25,.8); border: 2px solid var(--ink); overflow: hidden; min-width: 80px; }
-#guard-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #5fe0ff, #bff3ff); }
-#guard-fill.low { background: #6b7a90; }
 #special-fill { height: 100%; width: 0; background: linear-gradient(90deg, #36c3ff, #2f6bff 50%, #b14dff); }
 .special.full #special-fill { background: linear-gradient(90deg, #ffe066, #ff8a1f, #ff3d6e, #ffe066); background-size: 200% 100%; animation: shimmer .6s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
-#guard-pct, #special-pct { font-weight: 900; font-size: 13px; min-width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
+#special-pct { font-weight: 900; font-size: 13px; min-width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
 .ready { position: absolute; right: 0; bottom: 100%; font: 900 italic 15px "Arial Black", sans-serif; color: var(--gold); animation: blink .5s steps(2) infinite; }
 @keyframes blink { 50% { opacity: .25; } }
-#keyguide { flex: 1; margin: 0; text-align: center; font-size: 13px; font-weight: 700; opacity: .9; }
+/* v4: the key guide is one horizontal row of unbreakable chips (never a one-character column), shown briefly at the
+   start of a run or while ? is held open; hidden on narrow screens where the pause menu / help has the full list */
+.control-hints { flex: 1 1 auto; min-width: 0; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 4px 12px; font-size: 13px; font-weight: 700; transition: opacity .4s; }
+.control-hints > span { display: inline-flex; flex: 0 0 auto; white-space: nowrap; word-break: keep-all; writing-mode: horizontal-tb; }
+.control-hints.faded { opacity: 0; }
+#hud { left: 0; right: 0; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+.hud-left, .hud-right { min-width: 0; }
+.where { min-width: 0; } .where > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .special { margin-left: auto; }
 
 /* ---------- touch pad ---------- */
@@ -131,8 +137,18 @@ kbd { display: inline-block; padding: 0 .45em; margin: 0 .1em; border-radius: .3
   #hearts svg { width: 24px; height: 22px; }
   .icon-btn { width: 40px; height: 40px; }
   .hint { top: 76px; font-size: 13px; }
-  .gauge { flex-basis: 45%; }
+  .gauge { flex-basis: 60%; }
+  .control-hints { display: none; }
+  .where .next { display: none; }
+}
+@media (max-height: 460px) {
+  .control-hints { display: none; }
+  #hud { padding-top: 4px; }
+  .where .next { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ready, .record, .pb-special:not(:disabled), .combo.big, #score.bump { animation: none !important; }
 }
+
+/* the full key list in the pause menu: wide rows, never squeezed */
+.pause-keys { display: flex !important; opacity: 1 !important; max-width: 520px; margin: 0 auto 14px; font-size: 14px; }

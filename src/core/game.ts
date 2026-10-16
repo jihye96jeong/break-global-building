@@ -2,13 +2,17 @@
 // output leaves as events the renderer and audio consume. Spec v1 §3–§8, the v2.0 game-feel patch (high jump,
 // hit-stop) and the v3.0 contact patch: attacks and guards resolve only on real, swept contact between the pose's
 // visible surface and the lowest floor's underside, through one combat resolver (special → guard → attack → crush).
+// v4 hotfix: unlimited guard (held or pressed, always succeeds on real contact), a crush is one life and a clean
+// DAMAGE_IMPACT → RECOVER sequence, absolute per-tier fall speeds, and a bottom-to-top special sweep.
 import { BALANCE, comboMultiplier, DANGER_Y, GROUND_Y, specialGain, tierFor } from '../config/balance';
-import { ATTACK_FEEL, CONTACT, GUARD_FEEL, HITSTOP_MS, JUMP_FEEL } from '../config/gameFeel';
+import { ATTACK_FEEL, CONTACT, GUARD_FEEL, HITSTOP_MS, JUMP_FEEL, SPECIAL_SEQ } from '../config/gameFeel';
 import { hitFloor, spawnBuilding, type FallingBuilding, type Floor, type Lane } from './building';
 
-export type Phase = 'BOOT' | 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'HIT_FREEZE' | 'PAUSED' | 'GAME_OVER' | 'SPECIAL_CUTIN' | 'WAVE_TRANSITION';
-/** OFF → READY (≤180 ms, no effect on the building) → HOLD → REPEL → RELEASE → OFF; READY that expires → LOCKED until ↓ is released. */
-export type GuardPhase = 'OFF' | 'READY' | 'LOCKED' | 'HOLD' | 'REPEL' | 'RELEASE';
+export type Phase = 'BOOT' | 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'DAMAGE_IMPACT' | 'RECOVER' | 'PAUSED' | 'GAME_OVER' | 'SPECIAL' | 'WAVE_TRANSITION';
+/** OFF (↓ only raises the blade) → HOLD → REPEL → RELEASE → OFF. No gauge, no timeout, no lock (v4 §3). */
+export type GuardPhase = 'OFF' | 'HOLD' | 'REPEL' | 'RELEASE';
+/** Who writes the building's y this tick (exactly one). */
+export type MotionOwner = 'FALLING' | 'GUARD_HOLD' | 'GUARD_REPEL' | 'GUARD_RELEASE' | 'DAMAGE_SEQUENCE' | 'SPECIAL_SEQUENCE' | 'NONE';
 
 export interface Intents {
   left: boolean; leftPressed: boolean;
@@ -30,13 +34,16 @@ export type GameEvent =
   | { t: 'whiff'; lane: Lane; variant: number }
   | { t: 'floor'; lane: Lane; floor: Floor; score: number; bottomY: number; landmarkId: string; oneHit: boolean; chain: number; last: boolean; aerial: boolean }
   | { t: 'building'; building: FallingBuilding; bonus: number; elite: boolean; aerial: boolean }
-  | { t: 'guardReady' }
   | { t: 'guardContact'; kind: 'ground' | 'air'; comboKept: boolean; planeY: number; clutch: boolean; impactSpeed: number; motionOwner: 'GUARD_HOLD'; contact: ContactProof }
   | { t: 'guardRepel'; kind: 'ground' | 'air' }
   | { t: 'guardRelease' }
-  | { t: 'guardBreak' }
   | { t: 'lifeLost'; livesLeft: number }
-  | { t: 'special'; floors: Floor[]; bottomY: number; landmarkId: string; score: number; clutch: boolean }
+  | { t: 'crushed'; floors: Floor[]; bottomY: number; landmarkId: string; air: boolean }
+  | { t: 'recover' }
+  | { t: 'special'; floors: number; bottomY: number; topY: number; landmarkId: string; score: number; clutch: boolean }
+  | { t: 'specialSlash'; floor: Floor; bottomY: number; index: number; total: number; landmarkId: string }
+  | { t: 'specialFinish'; topY: number; landmarkId: string }
+  | { t: 'speedUp'; tier: number; fallSpeed: number }
   | { t: 'specialReady' }
   | { t: 'combo'; combo: number }
   | { t: 'jump'; full: boolean }
@@ -65,6 +72,7 @@ export interface Swing {
   elapsedMs: number;
   activeMs: number;
   consumed: boolean; // one hit per swing, ever
+  held: boolean; // auto-repeat while Z is held
 }
 
 /** Live numbers for ?debugContact=1. */
@@ -95,9 +103,7 @@ export interface PlayerState {
   swingCount: number;
   swing: Swing | null;
   moveRepeatMs: number;
-  guardReadyMs: number; // READY time left
-  guardSincePressMs: number;
-  guarding: boolean; // guard pose shown (READY, LOCKED or in contact)
+  guarding: boolean; // guard pose shown (↓ held / pressed, or bracing)
 }
 
 export interface GuardContact {
@@ -107,6 +113,19 @@ export interface GuardContact {
   repelTravelled: number;
   contactY: number; // the underside's y at the contact instant
   segmentId: string;
+}
+
+/** v4 §7: the special's visual sweep. Score is paid at the start; floors burst one by one as the slash passes. */
+export interface SpecialSeq {
+  elapsedMs: number;
+  sweepMs: number;
+  startY: number; // underside of the lowest remaining floor
+  endY: number; // top of the building
+  total: number;
+  exploded: number;
+  finished: boolean;
+  slashY: number;
+  pending: GameEvent | null; // the 'building' event, emitted at the finish
 }
 
 export interface RunState {
@@ -125,12 +144,13 @@ export interface RunState {
   comboMs: number;
   maxCombo: number;
   special: number;
-  guard: number;
-  guardRegenDelayMs: number;
   guardPhase: GuardPhase;
   guardContact: GuardContact | null;
-  guardCooldownMs: number;
-  guardContacts: number;
+  guardContacts: number; // successful guard episodes (unlimited)
+  guardHeld: boolean; // debug: ↓ held this tick
+  guardPressedThisTick: boolean;
+  damageSequences: number;
+  specialSeq: SpecialSeq | null;
   lastGuardAtMs: number;
   swingIds: number;
   contact: ContactDebug;
@@ -147,14 +167,14 @@ export interface RunState {
 export function newPlayer(): PlayerState {
   return { lane: 1, laneFrom: 1, laneAnimMs: 0, y: 0, vy: 0, peakY: 0, jumpElapsed: 0, jumpCut: false, jumpBufferMs: 0, landMs: 0,
     facing: 1, attackCooldownMs: 0, attackAnimMs: 0, bufferedAttackMs: 0, swingCount: 0, swing: null, moveRepeatMs: 0,
-    guardReadyMs: 0, guardSincePressMs: 0, guarding: false };
+    guarding: false };
 }
 
 export function newRun(seed: number): RunState {
   return {
     phase: 'TITLE', pausedFrom: null, phaseMs: 0, timeMs: 0, seed, buildingIndex: 0, destroyedBuildings: 0,
     recentLandmarks: [], building: null, lives: BALANCE.lives, score: 0, combo: 0, comboMs: 0, maxCombo: 0,
-    special: 0, guard: BALANCE.guardMax, guardRegenDelayMs: 0, guardPhase: 'OFF', guardContact: null, guardCooldownMs: 0,
+    special: 0, guardPhase: 'OFF', guardContact: null, guardHeld: false, guardPressedThisTick: false, damageSequences: 0, specialSeq: null,
     guardContacts: 0, lastGuardAtMs: -1e9, swingIds: 0, contact: { attackGap: NaN, guardGap: NaN, toi: null, xOverlap: false, lastEvent: '', contactId: '' }, invulnMs: 0, freezeMs: 0, dangerWarned: '', chainLane: -1, chainCount: 0,
     player: newPlayer(), events: [], countdown: 3,
   };
@@ -231,15 +251,18 @@ function endGuard(s: RunState) {
 }
 
 function nextBuilding(s: RunState) {
+  const prevTier = s.building?.tier ?? 1;
   s.buildingIndex += 1;
   const b = spawnBuilding(s.seed, s.buildingIndex, s.destroyedBuildings, s.recentLandmarks);
   s.recentLandmarks = [...s.recentLandmarks, b.landmarkId].slice(-2);
   s.building = b;
   s.chainLane = -1; s.chainCount = 0;
-  if (guardOwnsBuilding(s)) endGuard(s);
+  endGuard(s); // a fresh building never inherits an old guard episode
+  s.specialSeq = null;
   s.phase = 'WAVE_TRANSITION';
-  s.phaseMs = BALANCE.waveGapMs;
+  s.phaseMs = s.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs;
   s.events.push({ t: 'wave', building: b });
+  if (b.tier > prevTier) s.events.push({ t: 'speedUp', tier: b.tier, fallSpeed: b.baseSpeed });
 }
 
 function addScore(s: RunState, n: number) {
@@ -263,12 +286,15 @@ function onSuccessfulHit(s: RunState) {
 
 const floorScore = (f: Floor, combo: number) => (BALANCE.floorScoreBase + f.ordinal * BALANCE.floorScorePerOrdinal) * comboMultiplier(combo);
 
-function buildingCleared(s: RunState, b: FallingBuilding, aerial: boolean) {
+/** Pays the building bonus exactly once; returns the 'building' event (emitted now, or at the special's finish). */
+function buildingCleared(s: RunState, b: FallingBuilding, aerial: boolean, emit = true): GameEvent {
   const bonus = BALANCE.buildingBonusBase + b.tier * BALANCE.buildingBonusPerTier + b.originalFloorCount * BALANCE.buildingBonusPerFloor
     + (b.elite ? BALANCE.eliteBonus : 0);
   addScore(s, bonus);
   s.destroyedBuildings += 1;
-  s.events.push({ t: 'building', building: b, bonus, elite: b.elite, aerial });
+  const e: GameEvent = { t: 'building', building: b, bonus, elite: b.elite, aerial };
+  if (emit) s.events.push(e);
+  return e;
 }
 
 // ---------------------------------------------------------------- attack (v3 §3)
@@ -280,7 +306,7 @@ function startSwing(s: RunState, held: boolean) {
   p.attackAnimMs = BALANCE.attackAnimMs;
   p.bufferedAttackMs = 0;
   const variant = p.swingCount++ % ATTACK_FEEL.swingVariants;
-  p.swing = { id: ++s.swingIds, variant, elapsedMs: 0, activeMs: held ? CONTACT.heldActiveMs : CONTACT.attackActiveMs, consumed: false };
+  p.swing = { id: ++s.swingIds, variant, elapsedMs: 0, activeMs: held ? CONTACT.heldActiveMs : CONTACT.attackActiveMs, consumed: false, held };
   s.events.push({ t: 'swing', lane: p.lane, variant, air: p.y > 0 });
 }
 
@@ -290,8 +316,9 @@ function startSwing(s: RunState, held: boolean) {
  */
 function resolveAttackContact(s: RunState, prev: Snapshot) {
   const p = s.player, sw = p.swing, b = s.building;
+  if (sw && sw.consumed && sw.held) { holdOnHeldBlade(s, prev); return false; }
   if (!sw || sw.consumed || sw.elapsedMs > sw.activeMs || bracing(s)) return false;
-  if (!b || b.defeated || !b.floors[0]) return false;
+  if (s.phase !== 'PLAYING' || !b || b.defeated || b.collisionDisabled || !b.floors[0]) return false;
   const floor = b.floors[0];
   const surf = attackSurfaceY(s);
   const gapNow = surf - b.bottomY;
@@ -317,6 +344,22 @@ function resolveAttackContact(s: RunState, prev: Snapshot) {
     lanePos: pos, y: contactY, segmentId: `${b.id}-${floor.id}-L${p.lane}`,
   }, sw.variant);
   return true;
+}
+
+/**
+ * Z held: between two swings of the 95 ms rhythm the raised blade physically supports a building that comes back
+ * onto it (stopped exactly at the contact point — no damage, no score). The next swing then strikes on real contact,
+ * so holding Z never loses a hit to frame timing. Tapping gets no support.
+ */
+function holdOnHeldBlade(s: RunState, prev: Snapshot) {
+  const b = s.building, sw = s.player.swing!;
+  if (s.phase !== 'PLAYING' || !b || b.defeated || b.collisionDisabled || !b.floors[0] || sw.elapsedMs > sw.activeMs || bracing(s)) return;
+  if (prev.floorId !== b.floors[0].id) return;
+  const surf = attackSurfaceY(s);
+  const toi = sweptContact(prev.attackY - prev.bottom, surf - b.bottomY);
+  if (toi === null || surf - b.bottomY > 0) return;
+  b.bottomY = Math.min(lerp(prev.bottom, b.bottomY, toi), lerp(prev.attackY, surf, toi));
+  b.velocityY = 0;
 }
 
 function applyHit(s: RunState, proof: ContactProof, variant: number) {
@@ -364,25 +407,59 @@ export function attack(s: RunState, held = false) {
   return true;
 }
 
-/** X: destroys every remaining floor of the current building at once (v1 §7.3). A separate skill: no contact needed. */
+/**
+ * X (v4 §7): the gauge empties, collision is off at once and every floor's score and the building bonus are paid
+ * exactly once. The floors stay on screen and burst one by one, bottom to top, as a giant slash sweeps up to the top.
+ */
 export function special(s: RunState) {
   const b = s.building;
-  if (s.phase !== 'PLAYING' || !b || b.defeated || s.special < BALANCE.specialMax) return false;
+  if (s.phase !== 'PLAYING' || !b || b.defeated || b.collisionDisabled || s.special < BALANCE.specialMax) return false;
   s.special = 0;
   const clutch = DANGER_Y - b.bottomY < 40;
-  const floors = b.floors.splice(0);
-  const bottomY = b.bottomY;
+  b.collisionDisabled = true;
+  b.velocityY = 0;
   let score = 0;
-  for (const f of floors) score += addScore(s, floorScore(f, s.combo) * BALANCE.specialFloorFactor);
-  b.defeated = true;
-  if (guardOwnsBuilding(s)) endGuard(s);
+  for (const f of b.floors) score += addScore(s, floorScore(f, s.combo) * BALANCE.specialFloorFactor);
+  endGuard(s);
   if (s.player.swing) s.player.swing.consumed = true;
-  s.events.push({ t: 'special', floors, bottomY, landmarkId: b.landmarkId, score, clutch });
-  buildingCleared(s, b, s.player.y > 0);
-  freeze(s, HITSTOP_MS.special);
-  s.phase = 'SPECIAL_CUTIN';
-  s.phaseMs = BALANCE.specialCutinMs;
+  const height = b.floors.reduce((a, f) => a + f.height, 0);
+  const pending = buildingCleared(s, b, s.player.y > 0, false);
+  const n = b.floors.length;
+  s.specialSeq = { elapsedMs: 0, sweepMs: Math.max(SPECIAL_SEQ.sweepMinMs, Math.min(SPECIAL_SEQ.sweepMaxMs, SPECIAL_SEQ.sweepBaseMs + SPECIAL_SEQ.sweepPerFloorMs * n)),
+    startY: b.bottomY, endY: b.bottomY - height, total: n, exploded: 0, finished: false, slashY: b.bottomY, pending };
+  s.events.push({ t: 'special', floors: n, bottomY: b.bottomY, topY: b.bottomY - height, landmarkId: b.landmarkId, score, clutch });
+  s.contact.lastEvent = 'SPECIAL';
+  s.phase = 'SPECIAL';
   return true;
+}
+
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+
+/** Charge → sweep (floors burst as the slash passes their middle) → top finish + impact stop → quick return. */
+function updateSpecial(s: RunState, ms: number) {
+  const q = s.specialSeq, b = s.building;
+  if (!q || !b) { nextBuilding(s); return; }
+  q.elapsedMs += ms;
+  const t = (q.elapsedMs - SPECIAL_SEQ.chargeMs) / q.sweepMs;
+  q.slashY = q.elapsedMs < SPECIAL_SEQ.chargeMs ? q.startY : lerp(q.startY, q.endY, easeOutCubic(t));
+  // floors are removed from the bottom (visual only; already scored): the rest stay exactly where they are drawn
+  while (b.floors.length && q.slashY <= b.bottomY - b.floors[0].height / 2) {
+    const f = b.floors.shift()!;
+    s.events.push({ t: 'specialSlash', floor: f, bottomY: b.bottomY, index: q.exploded, total: q.total, landmarkId: b.landmarkId });
+    q.exploded += 1;
+    b.bottomY -= f.height;
+  }
+  if (!q.finished && t >= 1 && !b.floors.length) {
+    q.finished = true;
+    b.defeated = true;
+    s.events.push({ t: 'specialFinish', topY: q.endY, landmarkId: b.landmarkId });
+    if (q.pending) s.events.push(q.pending);
+  }
+  const end = SPECIAL_SEQ.chargeMs + q.sweepMs + SPECIAL_SEQ.finishStopMs + SPECIAL_SEQ.returnMs;
+  if (q.finished && q.elapsedMs >= end) {
+    if (s.combo > 0) s.comboMs = BALANCE.comboWindowMs;
+    nextBuilding(s);
+  }
 }
 
 function updateLanes(s: RunState, ms: number, input: Intents) {
@@ -405,7 +482,7 @@ function updateLanes(s: RunState, ms: number, input: Intents) {
 }
 
 /** How far above the head the hero's top reaches in the current pose (the blade). */
-const poseReach = (s: RunState) => (s.guardPhase === 'READY' ? GUARD_FEEL.guardReachAboveHead : CONTACT.attackReachAboveHead);
+const poseReach = (s: RunState) => (s.player.guarding && s.guardPhase === 'OFF' ? GUARD_FEEL.guardReachAboveHead : CONTACT.attackReachAboveHead);
 
 /** Keep an airborne hero's blade from entering the underside: the building is a ceiling and pushes them down. */
 function clampUnderBuilding(s: RunState) {
@@ -445,62 +522,51 @@ function updateJump(s: RunState, dt: number, input: Intents) {
   clampUnderBuilding(s);
 }
 
-// ---------------------------------------------------------------- guard (v3 §5)
-function updateGuardInput(s: RunState, dt: number, input: Intents) {
-  const p = s.player;
-  const ms = dt * 1000;
-  s.guardCooldownMs = Math.max(0, s.guardCooldownMs - ms);
-  p.guardSincePressMs += ms;
-  if (s.guardPhase === 'READY') {
-    p.guardReadyMs -= ms;
-    // released early: the press still counts for a short pre-contact buffer only
-    if (!input.guard) p.guardReadyMs = Math.min(p.guardReadyMs, GUARD_FEEL.preContactBufferMs - p.guardSincePressMs);
-    if (p.guardReadyMs <= 0) s.guardPhase = input.guard ? 'LOCKED' : 'OFF'; // holding from far away never auto-guards
-  }
-  if (s.guardPhase === 'LOCKED' && !input.guard) s.guardPhase = 'OFF';
-  // a fresh press arms the guard; the contact check runs later in this same tick, so a press on the contact frame counts
-  if (input.guardPressed && (s.guardPhase === 'OFF' || s.guardPhase === 'LOCKED') && s.guardCooldownMs <= 0) {
-    s.guardPhase = 'READY';
-    p.guardReadyMs = GUARD_FEEL.readyWindowMs;
-    p.guardSincePressMs = 0;
-    s.events.push({ t: 'guardReady' });
-  }
-  p.guarding = s.guardPhase === 'READY' || s.guardPhase === 'LOCKED' || bracing(s);
-  if (!bracing(s)) {
-    if (s.guardRegenDelayMs > 0) s.guardRegenDelayMs = Math.max(0, s.guardRegenDelayMs - ms);
-    else s.guard = Math.min(BALANCE.guardMax, s.guard + BALANCE.guardRegenPerSec * dt);
-  } else s.guardRegenDelayMs = BALANCE.guardRegenDelayMs;
+// ---------------------------------------------------------------- guard (v4 §3: unlimited, always on real contact)
+function updateGuardInput(s: RunState, input: Intents) {
+  s.guardHeld = input.guard;
+  s.guardPressedThisTick = input.guardPressed;
+  s.player.guarding = input.guard || input.guardPressed || bracing(s);
 }
 
-/** READY + real swept contact → HOLD at the exact contact point. Never moves a building that has not touched. */
+/**
+ * ↓ held, or pressed this tick, + the underside really meeting the guard blade → success, every time: no gauge,
+ * no ready window, no re-press. Swept (TOI) for fast falls; a building already pressing on the blade (but not yet
+ * crushing the hero) is caught where it is. Stops at the impact point; the rest of this tick's fall is discarded.
+ */
 function resolveGuardContact(s: RunState, prev: Snapshot, dt: number) {
   const b = s.building;
-  if (s.guardPhase !== 'READY' || !b || b.defeated) return false;
+  if (s.phase !== 'PLAYING' || s.guardPhase !== 'OFF' || !b || b.defeated || b.collisionDisabled) return false;
+  if (!s.guardHeld && !s.guardPressedThisTick) return false;
   const p = s.player;
   const plane = guardPlaneY(s);
   const gapNow = plane - b.bottomY;
   s.contact.guardGap = gapNow;
   const sameFloor = prev.floorId === (b.floors[0]?.id ?? '');
-  const toi = sweptContact(sameFloor ? prev.guardY - prev.bottom : gapNow, gapNow);
-  if (toi === null) return false;
-  // the building spans all three lanes, so the raised blade is always under some part of it (lanes clamp to 0..2)
+  const prevGap = sameFloor ? prev.guardY - prev.bottom : gapNow;
+  let toi = sweptContact(prevGap, gapNow);
+  let contactY: number, gapAt: number;
+  if (toi !== null) {
+    const bottomAt = sameFloor ? lerp(prev.bottom, b.bottomY, toi) : b.bottomY;
+    const planeAt = sameFloor ? lerp(prev.guardY, plane, toi) : plane;
+    contactY = Math.min(bottomAt, planeAt);
+    gapAt = planeAt - bottomAt;
+  } else if (prevGap <= CONTACT.touchEpsilonWu && gapNow <= CONTACT.touchEpsilonWu) {
+    // already pressing deeper than the blade but not yet on the hero's head: caught right where it was
+    toi = 0;
+    contactY = Math.min(sameFloor ? prev.bottom : b.bottomY, DANGER_Y - 0.01);
+    gapAt = prevGap;
+  } else return false;
   const air = p.y > 0;
   const kind = air ? 'air' : 'ground';
-  const cost = air ? BALANCE.air.cost : BALANCE.ground.cost;
-  s.guardCooldownMs = GUARD_FEEL.contactCooldownMs;
-  if (s.guard < cost) { s.events.push({ t: 'guardBreak' }); s.guardPhase = 'LOCKED'; s.contact.lastEvent = 'GUARD_BREAK'; return false; }
-  const bottomAt = sameFloor ? lerp(prev.bottom, b.bottomY, toi) : b.bottomY;
-  const planeAt = sameFloor ? lerp(prev.guardY, plane, toi) : plane;
-  const contactY = Math.min(bottomAt, planeAt); // stop at the impact point; the rest of this tick's fall is discarded
   const impactSpeed = sameFloor && dt > 0 ? ((b.bottomY - prev.bottom) - (plane - prev.guardY)) / dt : b.velocityY;
   b.bottomY = contactY;
   b.velocityY = 0;
-  s.guard = Math.max(0, s.guard - cost); // exactly once per contact
   s.guardContacts += 1;
-  const segmentId = `${b.id}-${b.floors[0]?.id ?? 'x'}-L${p.lane}`;
+  const segmentId = `${b.id}:${b.floors[0]?.id ?? 'x'}:${p.lane}:${s.guardContacts}`; // contact episode key
   s.guardContact = { id: s.guardContacts, kind, phaseMs: 0, repelTravelled: 0, contactY, segmentId };
   s.guardPhase = 'HOLD';
-  if (p.swing) p.swing.consumed = true; // guard wins a same-tick attack: no extra damage from the bracing pose
+  if (p.swing) p.swing.consumed = true; // guard wins a same-tick attack
   if (air) {
     if (s.combo > 0) s.comboMs += BALANCE.air.comboExtendMs;
     p.vy = 0;
@@ -509,7 +575,7 @@ function resolveGuardContact(s: RunState, prev: Snapshot, dt: number) {
   s.contact.lastEvent = 'GUARD_CONTACT';
   s.contact.contactId = segmentId;
   s.events.push({ t: 'guardContact', kind, comboKept: air, planeY: contactY, clutch: false, impactSpeed: Math.max(0, impactSpeed), motionOwner: 'GUARD_HOLD',
-    contact: { contactConfirmed: true, atExactContact: Math.abs(planeAt - contactY) <= CONTACT.touchEpsilonWu, laneMatched: true, gap: planeAt - bottomAt, toi,
+    contact: { contactConfirmed: true, atExactContact: Math.abs(Math.max(gapAt, 0)) <= CONTACT.touchEpsilonWu, laneMatched: true, gap: gapAt, toi,
       lanePos: heroLanePos(p), y: contactY, segmentId } });
   return true;
 }
@@ -568,22 +634,63 @@ function handleAttackInput(s: RunState, input: Intents) {
   else if (input.attack) startSwing(s, true); // held: auto-repeat on the 95 ms rhythm
 }
 
-/** Crush: no special, no guard, no hit → the v1 danger-line rule. */
-function resolveDanger(s: RunState) {
+/** Who writes the building's y right now (exactly one; v4 §5). */
+export function motionOwner(s: RunState): MotionOwner {
   const b = s.building;
-  if (!b || b.defeated || s.phase !== 'PLAYING' || bracing(s)) return;
+  if (!b || b.defeated) return 'NONE';
+  if (s.phase === 'SPECIAL') return 'SPECIAL_SEQUENCE';
+  if (s.phase === 'DAMAGE_IMPACT' || s.phase === 'RECOVER') return 'DAMAGE_SEQUENCE';
+  if (s.guardPhase === 'HOLD') return 'GUARD_HOLD';
+  if (s.guardPhase === 'REPEL') return 'GUARD_REPEL';
+  if (s.guardPhase === 'RELEASE') return 'GUARD_RELEASE';
+  return 'FALLING';
+}
+
+/** Crush (only when no special, guard or hit resolved it): one life, then DAMAGE_IMPACT → RECOVER (v4 §2). */
+function resolveCrush(s: RunState) {
+  const b = s.building;
+  if (!b || b.defeated || b.collisionDisabled || s.phase !== 'PLAYING' || bracing(s)) return;
   // warn once when the building would reach the hero within 0.25 s
-  if (s.dangerWarned !== b.id && s.guardPhase === 'OFF' && b.velocityY > 0 && (DANGER_Y - b.bottomY) / b.velocityY < 0.25) { s.dangerWarned = b.id; s.events.push({ t: 'danger' }); }
-  if (b.bottomY >= DANGER_Y && s.invulnMs <= 0) {
-    s.lives -= 1;
-    breakCombo(s);
+  if (s.dangerWarned !== b.id && !s.player.guarding && b.velocityY > 0 && (DANGER_Y - b.bottomY) / b.velocityY < 0.25) { s.dangerWarned = b.id; s.events.push({ t: 'danger' }); }
+  if (b.bottomY < DANGER_Y) return;
+  // lock first: nothing in this or a later tick can hit, guard or crush with this building again
+  s.phase = 'DAMAGE_IMPACT';
+  s.phaseMs = BALANCE.damageImpactMs;
+  b.collisionDisabled = true;
+  b.velocityY = 0;
+  const floors = b.floors.splice(0);
+  b.defeated = true;
+  if (s.invulnMs <= 0) {
+    s.lives = Math.max(0, s.lives - 1);
     s.invulnMs = BALANCE.invulnAfterHitMs;
     s.events.push({ t: 'lifeLost', livesLeft: s.lives });
-    s.contact.lastEvent = 'CRUSH';
-    s.phase = 'HIT_FREEZE';
-    s.phaseMs = BALANCE.hitFreezeMs;
-    if (s.guardPhase !== 'OFF') endGuard(s);
-  } else if (b.bottomY >= DANGER_Y) b.bottomY = DANGER_Y; // invulnerable: rests on the hero, never passes through
+  }
+  s.damageSequences += 1;
+  breakCombo(s);
+  endGuard(s);
+  s.player.swing = null;
+  s.player.bufferedAttackMs = 0;
+  s.contact.lastEvent = 'CRUSH';
+  s.events.push({ t: 'crushed', floors, bottomY: DANGER_Y, landmarkId: b.landmarkId, air: s.player.y > 0 });
+}
+
+/** The hero is put back on safe ground in their lane; then the next building (or game over). */
+function updateDamage(s: RunState, ms: number) {
+  s.phaseMs -= ms;
+  if (s.phaseMs > 0) return;
+  if (s.phase === 'DAMAGE_IMPACT') {
+    const p = s.player;
+    p.y = 0; p.vy = 0; p.laneFrom = p.lane; p.laneAnimMs = 0; p.guarding = false; p.swing = null; p.attackAnimMs = 0;
+    s.phase = 'RECOVER';
+    s.phaseMs = BALANCE.damageRecoverMs;
+    s.events.push({ t: 'recover' });
+    return;
+  }
+  if (s.lives <= 0) {
+    s.phase = 'GAME_OVER';
+    s.building = null;
+    s.events.push({ t: 'gameOver', score: s.score });
+  } else nextBuilding(s);
 }
 
 /** One fixed simulation step (dt seconds). Input is applied only while PLAYING. */
@@ -613,28 +720,20 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
       p.swing = null;
       updateLanes(s, ms, input);
       updateJump(s, dt, input);
-      updateGuardInput(s, dt, input);
+      updateGuardInput(s, input);
       if (input.attackPressed) p.bufferedAttackMs = CONTACT.attackBufferMs;
       if (s.phaseMs <= 0) s.phase = 'PLAYING';
       return;
-    case 'SPECIAL_CUTIN':
-      s.phaseMs -= ms; // invulnerable; the combo timer restarts when it ends
-      s.freezeMs = Math.max(0, s.freezeMs - ms);
+    case 'SPECIAL':
+      // collision is off; the hero is invulnerable; falling, attacks and guards are all skipped
+      s.freezeMs = 0;
       updateJump(s, dt, input);
-      if (s.phaseMs <= 0) {
-        if (s.combo > 0) s.comboMs = BALANCE.comboWindowMs;
-        nextBuilding(s);
-      }
+      updateSpecial(s, ms);
       return;
-    case 'HIT_FREEZE':
-      s.phaseMs -= ms;
-      if (s.phaseMs <= 0) {
-        if (s.lives <= 0) {
-          s.phase = 'GAME_OVER';
-          s.building = null;
-          s.events.push({ t: 'gameOver', score: s.score });
-        } else nextBuilding(s);
-      }
+    case 'DAMAGE_IMPACT':
+    case 'RECOVER':
+      // no input, no physics, no hits: the crush is being resolved
+      updateDamage(s, ms);
       return;
     case 'PLAYING': break;
   }
@@ -651,7 +750,7 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
   const prev = snapshot(s);
   if (p.swing) p.swing.elapsedMs += ms;
   updateLanes(s, ms, input);
-  updateGuardInput(s, dt, input);
+  updateGuardInput(s, input);
   if (input.specialPressed && special(s)) return; // 1) special: global, no contact needed
   updateJump(s, dt, input);
   handleAttackInput(s, input);
@@ -674,7 +773,7 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
     if (!p.swing.consumed) { s.events.push({ t: 'whiff', lane: p.lane, variant: p.swing.variant }); s.contact.lastEvent = 'ATTACK_WHIFF'; }
     p.swing = null;
   }
-  resolveDanger(s);
+  resolveCrush(s);
 }
 
 /** Drain events for the renderer / audio. */

@@ -20,7 +20,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const STEP = 1 / 60;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const debugFeel = new URLSearchParams(location.search).has('debugFeel');
-const debugContact = new URLSearchParams(location.search).has('debugContact');
+let debugContact = new URLSearchParams(location.search).has('debugContact') || new URLSearchParams(location.search).has('debug');
+addEventListener('keydown', (ev) => { if (ev.key === 'F3') { ev.preventDefault(); debugContact = !debugContact; } }); // dev overlay toggle
 
 const save = loadSave();
 const audio = new AudioManager();
@@ -35,7 +36,8 @@ state.phase = 'BOOT';
 
 let visual: BuildingVisual | null = null;
 let bgLandmark = LANDMARKS[0].id;
-const effects = { flash: 0, red: 0, cutin: 0, recoil: 0, recoilMs: 0, danger: 0 };
+const effects = { flash: 0, red: 0, cutin: 0, recoil: 0, recoilMs: 0, danger: 0, panY: 0, slashGlow: 0 };
+let keyGuideMs = 0; // v4: the in-game key row shows for 4 s at the start of a run, then fades
 const pendingBursts: { at: number; fn: () => void }[] = [];
 const eventLog: string[] = []; // debug panel only
 
@@ -51,7 +53,7 @@ let hintStep = 0, hintTimer = 0, hint3Shown = false, tutorialActive = !save.tuto
 // ---------------------------------------------------------------- HUD
 const HEART = (full: boolean) =>
   `<svg viewBox="0 0 30 28"><path d="M15 26 C5 18 1 13 1 8 A6.5 6.5 0 0 1 15 5 A6.5 6.5 0 0 1 29 8 C29 13 25 18 15 26Z" fill="${full ? '#ff4a5e' : 'rgba(255,255,255,.18)'}" stroke="#1b1530" stroke-width="2.5" stroke-linejoin="round"/>${full ? '<path d="M7 9 A3 3 0 0 1 11 6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".8"/>' : ''}</svg>`;
-const last = { lives: -1, score: -1, combo: -1, guard: -1, special: -1, bid: '', lang: '' };
+const last = { lives: -1, score: -1, combo: -1, special: -1, bid: '', lang: '' };
 const pad9 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(9, '0');
 
 function nextLandmarkName() {
@@ -79,13 +81,6 @@ function updateHud() {
     $('combo-n').textContent = String(state.combo);
     last.combo = state.combo;
   }
-  const gd = Math.round(state.guard);
-  if (gd !== last.guard) {
-    $('guard-fill').style.width = `${gd}%`;
-    $('guard-fill').classList.toggle('low', gd < BALANCE.air.cost);
-    $('guard-pct').textContent = `${gd}%`;
-    last.guard = gd;
-  }
   const sp = Math.round(state.special);
   if (sp !== last.special) {
     $('special-fill').style.width = `${sp}%`;
@@ -105,6 +100,13 @@ function updateHud() {
     $('next-name').textContent = nextLandmarkName();
     last.bid = bid; last.lang = lang;
   }
+}
+
+/** The key list as separate unbreakable chips (one row, wraps between chips only). */
+function renderKeyGuide() {
+  const html = t('keyGuide').split(' · ').map((k) => `<span>${k}</span>`).join('');
+  $('keyguide').innerHTML = html;
+  $('pause-keys').innerHTML = html;
 }
 
 function showHint(text: string, ms: number) {
@@ -136,9 +138,10 @@ function begin() {
   fx.clear(); camera.clear(); banners.clear();
   pendingBursts.length = 0;
   startRun(state, (Date.now() ^ (Math.random() * 1e9)) >>> 0);
-  last.lives = -1; last.score = -1; last.combo = -1; last.special = -1; last.guard = -1; last.bid = '';
+  last.lives = -1; last.score = -1; last.combo = -1; last.special = -1; last.bid = '';
   hintStep = 0; hint3Shown = false; tutorialActive = !save.tutorialSeen;
   $('hint').classList.add('hidden');
+  keyGuideMs = 4000; $('keyguide').classList.remove('faded');
   showOverlay(null);
   audio.play('start');
 }
@@ -264,9 +267,24 @@ function onEvent(e: GameEvent) {
       break;
     }
     case 'guardRelease': break;
-    case 'guardBreak': banners.offer('GUARD BREAK', P.CLUTCH, '#ff6b5e', 28); audio.play('swing'); break;
     case 'danger': effects.danger = 1; audio.play('danger'); break;
-    case 'lifeLost': effects.red = 1; kick(CAMERA_FEEL.damage, 0, 1); audio.play('hurt'); audio.play('stone'); break;
+    case 'lifeLost': effects.red = 1; kick(CAMERA_FEEL.damage, 0, 1); audio.play('hurt'); break;
+    case 'crushed': {
+      // v4 §2: the building that crushed the hero collapses at once (collision is already off) — dust, debris, a thud
+      let bottom = e.bottomY;
+      const v = visual;
+      e.floors.slice(0, 6).forEach((f, i) => {
+        const bb = bottom, fv = v?.floors.get(f.id);
+        bottom -= f.height;
+        const r = floorWorldRect(bb, f.height);
+        if (fv) pendingBursts.push({ at: effectClock + i * 25, fn: () => fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, material, lx, 0.8) });
+      });
+      fx.smoke(lx, GROUND_Y, 10, 'rgba(232,222,204,', 1.1);
+      audio.play('stone'); audio.play('crumble');
+      break;
+    }
+    case 'recover': fx.smoke(lx, GROUND_Y, 4, 'rgba(232,222,204,', 0.8); break;
+    case 'speedUp': banners.offer('SPEED UP!', P.CHAIN, '#ff9a62', 28, 0.5); break;
     case 'specialReady': audio.play('gaugeFull'); banners.offer('SPECIAL READY', P.NORMAL, '#ffcc33', 26); break;
     case 'combo': {
       const el = $('combo'); el.classList.remove('big'); void el.offsetWidth; el.classList.add('big');
@@ -276,23 +294,32 @@ function onEvent(e: GameEvent) {
       break;
     }
     case 'special': {
-      effects.cutin = 1; effects.flash = 0.8;
+      // A: charge — ring at the hero's feet, slight darkening (the building stays on screen, collision already off)
+      effects.cutin = 1; effects.slashGlow = 1;
       audio.play('ultCharge');
+      fx.ring(lx, GROUND_Y - 6, 160, 'rgba(255,240,180,.95)', 0.35, 10, 0.35);
       if (e.clutch) banners.offer('CLUTCH!', P.CLUTCH, '#8ff0ff', 30);
-      banners.offer('FULL BREAK!', P.SPECIAL, '#fff3b0', 46, 0.8);
-      // the floors are already gone in the game state; here they burst one after another, bottom to top
-      let bottom = e.bottomY;
-      const v = visual;
-      e.floors.forEach((f, i) => {
-        const bb = bottom, fv = v?.floors.get(f.id);
-        bottom -= f.height;
-        pendingBursts.push({ at: effectClock + 150 + i * (380 / Math.max(1, e.floors.length)), fn: () => {
-          const r = floorWorldRect(bb, f.height);
-          if (fv) fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, material, renderer.worldW / 2, 1.3);
-          if (i === 0) { audio.play('ultBoom'); kick(CAMERA_FEEL.special, 0, 1); } else if (i % 2 === 0) audio.play(material);
-        } });
-      });
-      fx.pop(renderer.worldW / 2, 300, `+${e.score}`, 34, '#ffe066');
+      banners.offer('FULL BREAK!', P.SPECIAL, '#fff3b0', 44, 0.9);
+      fx.pop(renderer.worldW / 2, 230, `+${e.score}`, 32, '#ffe066');
+      break;
+    }
+    case 'specialSlash': {
+      // B/C: each floor bursts as the slash passes it, bottom to top (score was already paid at the start)
+      const fv = visual?.floors.get(e.floor.id);
+      const r = floorWorldRect(e.bottomY, e.floor.height);
+      if (fv) fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, material, lx, 1.25);
+      fx.sparks(lx, e.bottomY - e.floor.height / 2, 8, ['#ffffff', '#fff3b0', '#bff3ff']);
+      if (e.index === 0) { audio.play('ultBoom'); kick(CAMERA_FEEL.special, 0, 1); }
+      else { audio.play(material, { pitch: 1 + e.index * 0.03 }); kick({ amp: 2.5, ms: 60 }, (e.index % 2 ? 1 : -1) * 0.4, 1); }
+      break;
+    }
+    case 'specialFinish': {
+      // D: the top — the biggest blast and a radial shockwave
+      fx.ring(lx, e.topY, 260, 'rgba(255,240,180,.95)', 0.5, 12, 0.45);
+      fx.sparks(lx, e.topY, 22, ['#ffffff', '#ffe066', '#ff8a1f']);
+      effects.flash = 0.35;
+      audio.play('ultBoom'); audio.play('finish');
+      kick(CAMERA_FEEL.building, 0, -1);
       break;
     }
     case 'wave': {
@@ -353,7 +380,13 @@ function frame(now: number) {
     effects.danger = Math.max(0, effects.danger - dt * 1.6);
     effects.recoilMs = Math.max(0, effects.recoilMs - dt * 1000);
     effects.recoil = DEBRIS_FEEL.recoilUnits * Math.sin((effects.recoilMs / DEBRIS_FEEL.recoilMs) * Math.PI) * (effects.recoilMs > 0 ? 1 : 0);
-    effects.cutin = state.phase === 'SPECIAL_CUTIN' ? Math.min(1, state.phaseMs / 200) : Math.max(0, effects.cutin - dt * 4);
+    effects.cutin = Math.max(0, effects.cutin - dt * 3.2); // a brief band only: the slash itself is the show
+    // the camera follows the special's slash up the building (and comes back during the return)
+    const q = state.phase === 'SPECIAL' ? state.specialSeq : null;
+    const panTarget = q && !q.finished ? Math.max(0, Math.min(420, 120 - q.slashY)) : 0;
+    effects.panY += (panTarget - effects.panY) * Math.min(1, dt * (panTarget > effects.panY ? 14 : 7));
+    effects.slashGlow = q ? 1 : Math.max(0, effects.slashGlow - dt * 4);
+    if (keyGuideMs > 0) { keyGuideMs -= dt * 1000; if (keyGuideMs <= 0) $('keyguide').classList.add('faded'); }
     // tutorial hint 3: when the building first gets close
     if (tutorialActive && !hint3Shown && hintStep >= 1 && state.building && state.building.bottomY > DANGER_Y - 110 && state.phase === 'PLAYING') {
       hint3Shown = true; showHint(t('hint3'), 2000);
@@ -364,11 +397,11 @@ function frame(now: number) {
 
   const b = state.building;
   const fxState: FrameFx = {
-    camera, banners, recoil: effects.recoil, danger: effects.danger, debug: debugFeel, debugContact,
+    camera, banners, recoil: effects.recoil, danger: effects.danger, debug: debugFeel, debugContact, panY: effects.panY, slashGlow: effects.slashGlow,
     flash: effects.flash, redFlash: effects.red, cutin: effects.cutin, reducedMotion: reducedMotion || save.effectsLow,
     countdown: state.phase === 'COUNTDOWN' ? state.countdown : null,
     waveCard: state.phase === 'WAVE_TRANSITION' && b ? {
-      name: landmarkById(b.landmarkId).names[lang], elite: b.elite, k: 1 - state.phaseMs / BALANCE.waveGapMs,
+      name: landmarkById(b.landmarkId).names[lang], elite: b.elite, k: 1 - state.phaseMs / (state.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs),
       sub: `${landmarkById(b.landmarkId).names.en.toUpperCase()} · ${b.floors.length} ${t('floors')} · TIER ${b.tier}`,
     } : null,
     showHp: save.showHpNumbers,
@@ -393,7 +426,8 @@ function bind() {
     sel.addEventListener('change', () => setLang(sel.value as Lang));
   });
   applyDom();
-  onLangChange(() => { syncSound(); last.lang = ''; });
+  onLangChange(() => { syncSound(); last.lang = ''; renderKeyGuide(); });
+  renderKeyGuide();
   const click = (id: string, fn: () => void) => $(id).addEventListener('click', () => { audio.unlock(); fn(); });
   click('btn-start', begin);
   click('btn-restart', begin);
@@ -401,6 +435,7 @@ function bind() {
   click('btn-quit', toTitle);
   click('btn-resume', doResume);
   click('btn-pause', doPause);
+  click('btn-keys', doPause); // the full key list lives in the pause menu
   click('btn-mute', toggleSound);
   click('btn-sound', toggleSound);
   click('btn-pause-sound', toggleSound);

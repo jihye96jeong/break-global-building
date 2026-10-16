@@ -2,9 +2,9 @@
 // VIS (frame-rate / render independence). World units; gap = pose surface − underside (> 0 = apart).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BALANCE } from '../src/config/balance';
+import { BALANCE, DANGER_Y } from '../src/config/balance';
 import { CONTACT, GUARD_FEEL } from '../src/config/gameFeel';
-import { attack, attackSurfaceY, guardPlaneY, laneOverlap, NO_INPUT, special, sweptContact, takeEvents, tick, type GameEvent, type Intents, type RunState } from '../src/core/game';
+import { attack, attackSurfaceY, guardPlaneY, laneOverlap, motionOwner, NO_INPUT, special, sweptContact, takeEvents, tick, type GameEvent, type Intents, type RunState } from '../src/core/game';
 import type { HP } from '../src/core/building';
 import { building, floor, playing } from './helpers';
 
@@ -78,11 +78,10 @@ describe('CT — a normal attack damages only on real contact', () => {
   it('CT-08 one swing over many high-rate frames damages once', () => {
     const s = attackAt(0, [3, 3, 3], 115);
     attack(s);
-    let hits = 1 + 0;
-    takeEvents(s);
+    expect(s.building!.floors[0].hp[1]).toBe(2);
+    let hits = count(takeEvents(s), 'hit');
     for (let i = 0; i < 60; i++) hits += count(step(s, {}, 1 / 240), 'hit'); // no new press
     expect(hits).toBe(1);
-    expect(s.building!.floors[0].hp[1]).toBe(2);
   });
 
   it('CT-09 a weak (HP1) lane in contact: that one floor goes, once', () => {
@@ -124,7 +123,9 @@ describe('CT — a normal attack damages only on real contact', () => {
     const s = attackAt(300);
     s.special = 100;
     expect(special(s)).toBe(true);
-    expect(s.building!.floors).toHaveLength(0);
+    const b = s.building!;
+    while (s.phase === 'SPECIAL') step(s);
+    expect(b.floors).toHaveLength(0);
   });
 
   it('CT-13 property: in long random play every hit is at real contact', () => {
@@ -152,8 +153,8 @@ describe('CT — a normal attack damages only on real contact', () => {
   });
 });
 
-describe('GD — guard only on real contact, then HOLD → REPEL → RELEASE', () => {
-  it('GD-01 building 80 wu above: pose only; no stop, push, cost or success', () => {
+describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real contact', () => {
+  it('GD-01 building 80 wu above: pose only; no stop, no push, no success', () => {
     const s = guardAt(80);
     const b = s.building!;
     const ev = step(s, { guard: true, guardPressed: true });
@@ -161,43 +162,45 @@ describe('GD — guard only on real contact, then HOLD → REPEL → RELEASE', (
     expect(b.velocityY).toBe(115);
     expect(b.bottomY).toBeCloseTo(guardPlaneY(s) - 80 + 115 * DT, 5);
     expect(count(ev, 'guardContact')).toBe(0);
-    expect(s.guard).toBe(100);
   });
 
-  it('GD-02 building 12 wu above: READY, and until contact the fall is untouched', () => {
-    const s = guardAt(12);
+  it('GD-02 ↓ held from 50 wu: the fall is untouched until real contact, then success', () => {
+    const s = guardAt(50);
     const b = s.building!;
-    let y = b.bottomY;
-    step(s, { guard: true, guardPressed: true });
-    expect(s.guardPhase).toBe('READY');
-    while (s.guardPhase === 'READY') {
-      expect(b.bottomY).toBeCloseTo(y + 115 * DT, 5);
+    let y = b.bottomY, ev: GameEvent[] = [];
+    for (let i = 0; i < 60 && s.guardPhase === 'OFF'; i++) {
+      ev = step(s, { guard: true, guardPressed: i === 0 });
+      if (s.guardPhase === 'OFF') expect(b.bottomY).toBeCloseTo(y + 115 * DT, 5);
       y = b.bottomY;
-      step(s, { guard: true });
     }
-    expect(s.guardPhase).toBe('HOLD');
-  });
-
-  it('GD-03 contact at gap 0 inside the window: success, speed 0, held at the blade', () => {
-    const s = guardAt(0);
-    const ev = step(s, { guard: true, guardPressed: true });
     expect(count(ev, 'guardContact')).toBe(1);
-    expect(s.building!.velocityY).toBe(0);
-    expect(s.building!.bottomY).toBeCloseTo(guardPlaneY(s), 5);
-    const g = ev.find((e) => e.t === 'guardContact');
-    if (g?.t === 'guardContact') { expect(g.motionOwner).toBe('GUARD_HOLD'); expect(g.contact.atExactContact).toBe(true); }
+    expect(Math.abs(guardPlaneY(s) - b.bottomY)).toBeLessThanOrEqual(2); // caught within the 2 wu touch tolerance
+    expect(s.lives).toBe(3);
   });
 
-  it('GD-04 2.4× fall, guard pressed on the contact frame: no pass-through, held 120 ms', () => {
-    const speed = 115 * 2.4;
-    const s = guardAt(3, speed);
-    const ev = step(s, { guard: true, guardPressed: true });
+  it('GD-03 already touching (0–2 wu) and ↓ pressed for the first time: success on that tick, no life lost', () => {
+    for (const gap of [0, 1, 2, -2, -6]) {
+      const s = guardAt(gap);
+      const ev = step(s, { guard: true, guardPressed: true });
+      expect(count(ev, 'guardContact')).toBe(1);
+      expect(s.building!.velocityY).toBe(0);
+      expect(s.lives).toBe(3);
+      const g = ev.find((e) => e.t === 'guardContact');
+      if (g?.t === 'guardContact') expect(g.motionOwner).toBe('GUARD_HOLD');
+    }
+  });
+
+  it('GD-04 650 wu/s at 30 Hz with ↓ held: swept contact, stopped at the blade, held 120 ms, no life lost', () => {
+    const s = guardAt(60, 650);
+    let ev: GameEvent[] = [];
+    for (let i = 0; i < 10 && s.guardPhase === 'OFF'; i++) ev = ev.concat(step(s, { guard: true }, 1 / 30));
     expect(count(ev, 'guardContact')).toBe(1);
     const y = s.building!.bottomY;
-    expect(y).toBeLessThanOrEqual(guardPlaneY(s) + 1e-9);
+    expect(y).toBeCloseTo(guardPlaneY(s), 5);
     let held = 0;
-    while (s.guardPhase === 'HOLD') { step(s); expect(s.building!.bottomY).toBe(y); held += DT * 1000; }
-    expect(held).toBeGreaterThanOrEqual(110); expect(held).toBeLessThanOrEqual(135);
+    while (s.guardPhase === 'HOLD') { step(s, { guard: true }, 1 / 30); if (s.guardPhase === 'HOLD') expect(s.building!.bottomY).toBe(y); held += 1000 / 30; }
+    expect(held).toBeGreaterThanOrEqual(115); expect(held).toBeLessThanOrEqual(140);
+    expect(s.lives).toBe(3);
   });
 
   it('GD-05 gap +7 → −8 in one tick: found by the swept test, stopped AT the blade (not 7 wu early)', () => {
@@ -207,7 +210,7 @@ describe('GD — guard only on real contact, then HOLD → REPEL → RELEASE', (
     expect(s.building!.bottomY).toBeCloseTo(guardPlaneY(s), 5);
   });
 
-  it('GD-06/07/08 hold pinned (≤2 wu), push exactly 36 wu once over ~170 ms, release blends with no jump', () => {
+  it('GD-06/07/08 hold pinned (≤2 wu), push exactly 36 wu over ~170 ms (never a teleport), release blends back', () => {
     const s = guardAt(0);
     const b = s.building!;
     step(s, { guard: true, guardPressed: true });
@@ -220,41 +223,31 @@ describe('GD — guard only on real contact, then HOLD → REPEL → RELEASE', (
     expect(repel.length * DT * 1000).toBeLessThanOrEqual(185);
     const releaseStart = log.findIndex((x) => x.phase === 'RELEASE');
     expect(contactY - log[releaseStart].y).toBeCloseTo(GUARD_FEEL.repelUnits.ground, 5); // the push ends exactly 36 wu up
-    expect(Math.min(...log.map((x) => x.y))).toBeCloseTo(contactY - 36, 0);
-    for (let i = 1; i < log.length; i++) expect(Math.abs(log[i].y - log[i - 1].y)).toBeLessThan(8); // peak push speed ≈ 400 wu/s ≈ 6.6 wu per tick; never a 36 wu teleport
+    for (let i = 1; i < log.length; i++) expect(Math.abs(log[i].y - log[i - 1].y)).toBeLessThan(8); // peak ≈ 400 wu/s; never a 36 wu jump
     const rel = log.slice(releaseStart).filter((x) => x.phase === 'RELEASE');
     for (let i = 1; i < rel.length; i++) expect(rel[i].v).toBeGreaterThanOrEqual(rel[i - 1].v);
     expect(rel.length * DT * 1000).toBeLessThanOrEqual(85);
   });
 
-  it('GD-09 holding ↓ from far away never becomes an auto-guard; a fresh press is needed', () => {
-    const s = guardAt(120, 115);
-    let ev: GameEvent[] = step(s, { guard: true, guardPressed: true });
-    for (let t = 0; t < 1.5 && s.phase === 'PLAYING'; t += DT) ev = ev.concat(step(s, { guard: true }));
-    expect(count(ev, 'guardContact')).toBe(0);
-    expect(s.lives).toBe(2); // crushed: the long hold protected nothing
-    const r = guardAt(40, 115);
-    step(r, { guard: true, guardPressed: true });
-    for (let i = 0; i < 12; i++) step(r, { guard: true });
-    expect(r.guardPhase).toBe('LOCKED');
-    step(r, {}); // release
-    let ok = 0;
-    for (let i = 0; i < 30; i++) ok += count(step(r, { guard: true, guardPressed: i === 0 }), 'guardContact');
-    expect(ok).toBe(1);
+  it('GD-09 ↓ held for over a second: every new contact is caught again, unlimited, no re-press', () => {
+    const s = guardAt(120, 300);
+    let ev: GameEvent[] = [];
+    for (let t = 0; t < 3; t += DT) ev = ev.concat(step(s, { guard: true, guardPressed: t === 0 }));
+    expect(count(ev, 'guardContact')).toBeGreaterThanOrEqual(4);
+    expect(s.lives).toBe(3);
+    expect(Object.keys(s)).not.toContain('guard'); // no gauge in the state at all
   });
 
-  it('GD-10/11 mashing across one contact: one success, gauge −30 once, combo reset (ground)', () => {
+  it('GD-10/11 mashing across one contact: one success per episode, ground guard resets the combo', () => {
     const s = guardAt(6);
     s.combo = 9; s.comboMs = 1500;
     let contacts = 0;
-    for (let i = 0; i < 30; i++) contacts += count(step(s, { guard: true, guardPressed: true }), 'guardContact');
+    for (let i = 0; i < 20; i++) contacts += count(step(s, { guard: true, guardPressed: true }), 'guardContact');
     expect(contacts).toBe(1);
     expect(s.combo).toBe(0);
-    expect(s.guard).toBeGreaterThanOrEqual(100 - 30 - 0.001);
-    expect(s.guard).toBeLessThanOrEqual(100 - 30 + 30 * 0.5 * BALANCE.guardRegenPerSec / 60 * 60);
   });
 
-  it('GD-12 air guard: combo kept, −18, hold 100 ms, push 18 wu', () => {
+  it('GD-12 air guard: combo kept, hold 100 ms, push 18 wu', () => {
     const s = playing(building(tall(6)));
     s.player.y = 100;
     const b = s.building!;
@@ -264,7 +257,6 @@ describe('GD — guard only on real contact, then HOLD → REPEL → RELEASE', (
     const g = ev.find((e) => e.t === 'guardContact');
     expect(g?.t === 'guardContact' && g.kind).toBe('air');
     expect(s.combo).toBe(7);
-    expect(s.guard).toBe(100 - 18);
     const y0 = b.bottomY;
     let hold = 0;
     while (s.guardPhase === 'HOLD') { step(s); hold += DT * 1000; expect(Math.abs(guardPlaneY(s) - b.bottomY)).toBeLessThanOrEqual(2); }
@@ -273,15 +265,10 @@ describe('GD — guard only on real contact, then HOLD → REPEL → RELEASE', (
     expect(y0 - b.bottomY).toBeCloseTo(18, 5);
   });
 
-  it('GD-13 not enough gauge: no stop, no push; the normal crush rule applies', () => {
-    const s = guardAt(2);
-    s.guard = 10;
-    let ev: GameEvent[] = step(s, { guard: true, guardPressed: true });
-    expect(s.building!.velocityY).toBeGreaterThan(0);
-    for (let t = 0; t < 0.5 && s.phase === 'PLAYING'; t += DT) ev = ev.concat(step(s, { guard: true }));
-    expect(count(ev, 'guardContact')).toBe(0);
-    expect(count(ev, 'guardBreak')).toBe(1);
-    expect(s.lives).toBe(2);
+  it('GD-13 guarding gives no score, combo or special', () => {
+    const s = guardAt(120, 300);
+    for (let t = 0; t < 3; t += DT) step(s, { guard: true });
+    expect([s.score, s.combo, s.special]).toEqual([0, 0, 0]);
   });
 
   it('GD-14 mashing Z during hold / push / release never damages from a distance', () => {
@@ -297,15 +284,107 @@ describe('GD — guard only on real contact, then HOLD → REPEL → RELEASE', (
     expect(hpSum(s)).toBe(hp);
   });
 
-  it('GD-15 Z and ↓ on the same contact frame: the guard wins, no damage, no life lost', () => {
-    const s = guardAt(0);
+  it('GD-15 Z + ↓ on the same contact frame, even about to crush: the guard wins, no damage, no life lost', () => {
+    const s = guardAt(0, 650);
     s.building!.floors[0].hp = [1, 1, 1];
     const hp = hpSum(s);
     const ev = step(s, { guard: true, guardPressed: true, attack: true, attackPressed: true });
     expect(count(ev, 'guardContact')).toBe(1);
-    expect(count(ev, 'hit')).toBe(0);
+    expect(count(ev, 'hit') + count(ev, 'lifeLost')).toBe(0);
     expect(hpSum(s)).toBe(hp);
     expect(s.lives).toBe(3);
+  });
+});
+
+describe('CR — v4 crush: one life, collision off, the hero recovers', () => {
+  const crush = (speed = 190) => { const s = playing(building(tall(5), DANGER_Y - 20)); s.building!.baseSpeed = speed; s.building!.velocityY = speed; return s; };
+
+  it('CR-01/02 a crush costs exactly one life, however much is pressed for the next 60 frames', () => {
+    const s = crush();
+    const first = s.building!;
+    let ev: GameEvent[] = [];
+    while (s.phase === 'PLAYING') ev = ev.concat(step(s)); // no answer: crushed
+    for (let i = 0; i < 60; i++) ev = ev.concat(step(s, { attack: true, attackPressed: true, guard: true, guardPressed: i % 3 === 0, jumpPressed: i % 7 === 0, jump: true }));
+    expect(count(ev, 'lifeLost')).toBe(1);
+    expect(count(ev, 'crushed')).toBe(1);
+    expect(s.lives).toBe(2);
+    expect(first.collisionDisabled).toBe(true);
+  });
+
+  it('CR-03/04 during the damage sequence Z changes nothing and the crushed building never jumps up', () => {
+    const s = crush();
+    while (s.phase === 'PLAYING') step(s);
+    expect(s.phase).toBe('DAMAGE_IMPACT');
+    const b = s.building!;
+    const y = b.bottomY, score = s.score, special = s.special;
+    let ev: GameEvent[] = [];
+    while (s.phase === 'DAMAGE_IMPACT' || s.phase === 'RECOVER') {
+      expect(motionOwner(s)).toBe('NONE'); // collision off, nobody moves it
+      ev = ev.concat(step(s, { attack: true, attackPressed: true, specialPressed: true }));
+      if (s.building === b) expect(b.bottomY).toBe(y);
+    }
+    expect(count(ev, 'hit') + count(ev, 'floor') + count(ev, 'swing')).toBe(0);
+    expect([s.score, s.special]).toEqual([score, special]);
+  });
+
+  it('CR-05 after recovery the hero stands on the ground in their lane and a new building comes (≤0.5 s)', () => {
+    const s = crush();
+    s.player.lane = 2; s.player.laneFrom = 2;
+    s.player.y = 30; s.player.vy = 0;
+    let t = 0;
+    while (s.phase === 'PLAYING') { step(s); t += DT; }
+    const crushedAt = t;
+    while (s.phase === 'DAMAGE_IMPACT' || s.phase === 'RECOVER') { step(s); t += DT; }
+    expect(t - crushedAt).toBeLessThanOrEqual(0.42);
+    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect([s.player.y, s.player.lane]).toEqual([0, 2]);
+    expect(s.building!.id).not.toBe('test');
+    expect(s.building!.bottomY).toBeLessThan(DANGER_Y - 100);
+  });
+
+  it('CR-06 the last life → GAME OVER and no next building', () => {
+    const s = crush();
+    s.lives = 1;
+    for (let i = 0; i < 60; i++) step(s);
+    expect(s.lives).toBe(0);
+    expect(s.phase).toBe('GAME_OVER');
+    expect(s.building).toBeNull();
+  });
+});
+
+describe('SP — v4 special sweep', () => {
+  it('SP-01..06 X at 100: gauge 0, collision off at once; floors burst bottom → top, once each; finish; next building', () => {
+    const s = playing(building(tall(12, [3, 3, 3], 40), DANGER_Y - 5));
+    s.building!.baseSpeed = 650; s.building!.velocityY = 650;
+    s.special = 100;
+    const b = s.building!;
+    const ids = b.floors.map((f) => f.id);
+    let ev = step(s, { specialPressed: true });
+    expect(s.special).toBe(0);
+    expect(b.collisionDisabled).toBe(true);
+    const scoreAfterStart = s.score;
+    let t = 0;
+    while (s.phase === 'SPECIAL' && t < 3) { ev = ev.concat(step(s, { attack: true, attackPressed: true })); t += DT; }
+    expect(t).toBeGreaterThanOrEqual(1.0); expect(t).toBeLessThanOrEqual(1.5);
+    const slashes = ev.filter((e) => e.t === 'specialSlash');
+    expect(slashes.map((e) => e.t === 'specialSlash' && e.floor.id)).toEqual(ids); // every floor, bottom to top, once
+    expect(count(ev, 'specialFinish')).toBe(1);
+    expect(count(ev, 'building')).toBe(1);
+    expect(count(ev, 'lifeLost') + count(ev, 'hit')).toBe(0);
+    expect(s.score).toBe(scoreAfterStart); // paid once, at the start
+    expect(s.special).toBe(0);
+    expect(b.floors).toHaveLength(0);
+    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect(s.building).not.toBe(b);
+  });
+
+  it('SP-03 a building far above the screen is still swept to its very top', () => {
+    const s = playing(building(tall(20, [3, 3, 3], 40), 300)); // top at y = −500
+    s.special = 100;
+    special(s);
+    let minSlash = Infinity;
+    while (s.phase === 'SPECIAL') { step(s); if (s.specialSeq) minSlash = Math.min(minSlash, s.specialSeq.slashY); }
+    expect(minSlash).toBeLessThanOrEqual(300 - 20 * 40 + 1);
   });
 });
 
@@ -326,6 +405,21 @@ describe('VIS — judgement is independent of frame rate, camera and screen size
       const r = [30, 60, 120].map((hz) => heldAttackRun(hz, mult));
       for (const x of r) { expect(x.lives).toBe(3); expect(x.hits).toBeGreaterThan(8); }
       expect(Math.max(...r.map((x) => x.floors)) - Math.min(...r.map((x) => x.floors))).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('VIS-03 v4 speeds 190–650 wu/s at 30 / 60 / 120 / 144 Hz: holding Z never loses a hit to frame timing', () => {
+    for (const sp of [190, 240, 300, 390, 490, 600, 650]) for (const hz of [30, 60, 120, 144]) {
+      const s = playing(building(Array.from({ length: 14 }, (_, i) => floor([2, 3, 2], i + 1, 22 + (i % 3) * 9)), 100));
+      s.building!.baseSpeed = sp; s.building!.velocityY = sp;
+      let lost = 0, hits = 0;
+      for (let t = 0; t < 5 && s.phase === 'PLAYING'; t += 1 / hz) {
+        const ev = step(s, { attack: true }, 1 / hz);
+        lost += count(ev, 'lifeLost'); hits += count(ev, 'hit');
+        for (const e of ev) if (e.t === 'hit') expect(e.contact.gap).toBeLessThanOrEqual(2);
+      }
+      expect(lost).toBe(0);
+      expect(hits).toBeGreaterThan(15);
     }
   });
 

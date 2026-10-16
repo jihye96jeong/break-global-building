@@ -1,8 +1,8 @@
 // Canvas drawing in world units: the world is 600 tall; its width follows the screen's aspect (spec §11.1).
 import { BALANCE, DANGER_Y, GROUND_Y, WORLD_H } from '../config/balance';
-import { GUARD_FEEL, JUMP_FEEL } from '../config/gameFeel';
+import { GUARD_FEEL, JUMP_FEEL, SPECIAL_SEQ } from '../config/gameFeel';
 import { landmarkById } from '../config/landmarks';
-import { attackSurfaceY, guardPlaneY, headY, heroLanePos, type RunState } from '../core/game';
+import { attackSurfaceY, guardPlaneY, headY, heroLanePos, motionOwner, type RunState } from '../core/game';
 import type { Banners, Camera } from './camera';
 import { imageNow } from './assets';
 import { drawHero } from './character';
@@ -18,6 +18,8 @@ export interface FrameFx {
   danger: number; // 0..1 DANGER pulse
   debug: boolean;
   debugContact: boolean;
+  panY: number; // v4 special: the world slides down so the slash can be followed up to the top
+  slashGlow: number;
   flash: number; // 0..1 white flash
   redFlash: number; // 0..1 hurt tint
   cutin: number; // 0..1 special cut-in strength
@@ -64,7 +66,7 @@ export class Renderer {
     const g = this.g;
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.save();
-    g.translate(f.camera.x, f.camera.y); // world layer only: hero and building shake together, HUD stays put
+    g.translate(f.camera.x, f.camera.y + f.panY); // world layer only: hero and building shake (and pan) together, HUD stays put
     this.drawBackground(bgLandmarkId);
 
     const b = s.building;
@@ -75,10 +77,11 @@ export class Renderer {
       g.restore();
     }
 
-    fx.draw(g);
     const p = s.player;
     const x = this.laneX(heroLanePos(p));
-    const invuln = s.invulnMs > 0 && s.phase !== 'SPECIAL_CUTIN';
+    if (s.phase === 'SPECIAL' && s.specialSeq) this.drawSpecialSlash(s, x, time, f.reducedMotion);
+    fx.draw(g);
+    const invuln = s.invulnMs > 0 && s.phase !== 'SPECIAL';
     const c = s.guardContact;
     const guardK = c ? Math.min(1, c.phaseMs / (s.guardPhase === 'HOLD' ? GUARD_FEEL.holdMs[c.kind] : s.guardPhase === 'REPEL' ? GUARD_FEEL.repelMs[c.kind] : GUARD_FEEL.releaseBlendMs)) : 0;
     const ceiling = b && !b.defeated ? Math.max(0, GROUND_Y - p.y - b.bottomY) : Infinity;
@@ -98,9 +101,9 @@ export class Renderer {
       attackK: p.attackAnimMs > 0 ? 1 - p.attackAnimMs / BALANCE.attackAnimMs : -1,
       variant: (p.swingCount + 2) % 3,
       guarding: p.guarding, guardPhase: s.guardPhase, guardK,
-      air: p.y > 0, rising: p.vy > 0 && p.jumpElapsed < JUMP_FEEL.takeoffStretchMs / 1000, moving: p.laneAnimMs > 0, hurt: s.phase === 'HIT_FREEZE',
+      air: p.y > 0, rising: p.vy > 0 && p.jumpElapsed < JUMP_FEEL.takeoffStretchMs / 1000, moving: p.laneAnimMs > 0, hurt: s.phase === 'DAMAGE_IMPACT',
       landK: p.landMs / JUMP_FEEL.landingSquashMs,
-      special: s.phase === 'SPECIAL_CUTIN' ? Math.sin(Math.min(1, 1 - s.phaseMs / BALANCE.specialCutinMs) * Math.PI) : 0,
+      special: this.specialLift(s),
       ceiling, time, blink: invuln && Math.floor(time / 80) % 2 === 0,
     });
     if (f.debug || f.debugContact) this.drawDebug(s, x);
@@ -133,6 +136,57 @@ export class Renderer {
       this.bigText('DANGER', GROUND_Y + 34, 26, '#ff6b5e');
       g.restore();
     }
+  }
+
+  /** Hero pose during the special: crouch on the charge, spring up with the slash, land on the return. */
+  private specialLift(s: RunState) {
+    const q = s.phase === 'SPECIAL' ? s.specialSeq : null;
+    if (!q) return 0;
+    if (q.elapsedMs < SPECIAL_SEQ.chargeMs) return 0.05;
+    const after = q.elapsedMs - SPECIAL_SEQ.chargeMs - q.sweepMs;
+    if (after <= 0) return Math.min(1, (q.elapsedMs - SPECIAL_SEQ.chargeMs) / 140);
+    return Math.max(0, 1 - after / (SPECIAL_SEQ.finishStopMs + SPECIAL_SEQ.returnMs * 0.8));
+  }
+
+  /** v4 §7: a giant blade of light rising from the hero to the slash front, with side shock planes and a hot tip. */
+  private drawSpecialSlash(s: RunState, heroX: number, time: number, reduced: boolean) {
+    const q = s.specialSeq!, g = this.g;
+    const charge = q.elapsedMs < SPECIAL_SEQ.chargeMs;
+    const after = q.elapsedMs - SPECIAL_SEQ.chargeMs - q.sweepMs;
+    const fade = after > 0 ? Math.max(0, 1 - after / (SPECIAL_SEQ.finishStopMs + SPECIAL_SEQ.returnMs * 0.7)) : 1;
+    const baseY = GROUND_Y - s.player.y - 30;
+    const tipY = charge ? baseY : q.slashY;
+    g.save();
+    // slight darkening of the world while the special runs
+    g.fillStyle = `rgba(10,8,30,${0.22 * fade})`; g.fillRect(-40, -1200, this.worldW + 80, WORLD_H + 2400);
+    if (charge) {
+      const k = q.elapsedMs / SPECIAL_SEQ.chargeMs;
+      g.strokeStyle = `rgba(255,240,180,${0.9 * k})`; g.lineWidth = 4;
+      g.beginPath(); g.ellipse(heroX, GROUND_Y - 4, 30 + 50 * k, 7 + 6 * k, 0, 0, Math.PI * 2); g.stroke();
+      g.restore();
+      return;
+    }
+    const w = this.laneGap * 1.35;
+    // wide shock plane
+    const grd = g.createLinearGradient(heroX - w, 0, heroX + w, 0);
+    grd.addColorStop(0, 'rgba(120,200,255,0)'); grd.addColorStop(0.5, `rgba(190,235,255,${0.45 * fade})`); grd.addColorStop(1, 'rgba(120,200,255,0)');
+    g.fillStyle = grd; g.fillRect(heroX - w, tipY, w * 2, baseY - tipY);
+    // bright core with a slight diagonal lean, flickering
+    const lean = reduced ? 0 : Math.sin(time * 0.05) * 4;
+    g.globalCompositeOperation = 'lighter';
+    for (const [hw, a] of [[22, 0.35], [10, 0.7], [4, 1]] as const) {
+      g.fillStyle = `rgba(255,250,225,${a * fade})`;
+      g.beginPath(); g.moveTo(heroX - hw - lean, baseY); g.lineTo(heroX + hw - lean, baseY); g.lineTo(heroX + hw * 0.6 + lean, tipY); g.lineTo(heroX - hw * 0.6 + lean, tipY); g.closePath(); g.fill();
+    }
+    // the hot front: a flare and two crack-wings racing across the building
+    if (after <= 0) {
+      const fl = g.createRadialGradient(heroX, tipY, 0, heroX, tipY, 70);
+      fl.addColorStop(0, 'rgba(255,255,255,1)'); fl.addColorStop(0.35, 'rgba(255,230,140,.8)'); fl.addColorStop(1, 'rgba(255,200,80,0)');
+      g.fillStyle = fl; g.fillRect(heroX - 70, tipY - 70, 140, 140);
+      g.strokeStyle = 'rgba(255,245,200,.95)'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(heroX - this.laneGap * 1.5, tipY + 12); g.lineTo(heroX, tipY); g.lineTo(heroX + this.laneGap * 1.5, tipY + 12); g.stroke();
+    }
+    g.restore();
   }
 
   /** Thin lines in the same camera transform as the sprites: attack surface, guard surface, the lane's underside, gap. */
@@ -178,16 +232,18 @@ export class Renderer {
       `Player guardSurface  Y: ${guardPlaneY(s).toFixed(1)}  head ${headY(s).toFixed(1)}`,
       `Building visibleBottom Y: ${b ? b.bottomY.toFixed(1) : '—'}`,
       `TOI: ${c.toi === null ? 'none' : c.toi.toFixed(2)}   X overlap: ${c.xOverlap}`,
-      `Guard state: ${s.guardPhase}`,
-      `Building velocityY: ${b ? b.velocityY.toFixed(1) : '—'}wu/s`,
-      `Motion owner: ${s.guardPhase === 'HOLD' || s.guardPhase === 'REPEL' || s.guardPhase === 'RELEASE' ? 'GUARD' : 'FALL'}`,
+      `phase ${s.phase}  guard ${s.guardPhase}  owner ${motionOwner(s)}`,
+      `fall ${b ? b.velocityY.toFixed(0) : '—'} / target ${b ? b.baseSpeed.toFixed(0) : '—'}wu/s  tier ${b?.tier ?? '—'}  TTC ${b && b.baseSpeed > 0 ? Math.max(0, (guardPlaneY(s) - b.bottomY) / b.baseSpeed).toFixed(2) + 's' : '—'}`,
+      `guardHeld ${s.guardHeld}  pressed ${s.guardPressedThisTick}  guards ${s.guardContacts}`,
+      `life ${s.lives}  damageSeq ${s.damageSequences}  invuln ${Math.round(s.invulnMs)}ms`,
+      `special floors left ${s.specialSeq ? s.specialSeq.total - s.specialSeq.exploded : '—'}`,
       `Contact ID: ${c.contactId || '—'}`,
       `Attack id: A${String(s.swingIds).padStart(5, '0')}`,
       `Last confirmed event: ${c.lastEvent || '—'}`,
     ];
     g.save();
     g.fillStyle = 'rgba(10,8,24,.78)';
-    g.fillRect(8, 70, 250, lines.length * 13 + 10);
+    g.fillRect(8, 70, 300, lines.length * 13 + 10);
     g.fillStyle = '#d7ffe0'; g.font = '600 10.5px ui-monospace, monospace'; g.textAlign = 'left'; g.textBaseline = 'top';
     lines.forEach((l, i) => g.fillText(l, 14, 76 + i * 13));
     g.restore();
@@ -246,7 +302,7 @@ export class Renderer {
 
     // lane chips under the current lowest floor: what each lane takes to break
     const f0 = b.floors[0];
-    if (!f0) return;
+    if (!f0 || b.collisionDisabled) return;
     // v3 VIS-01: a solid underside beam across all three lanes, its lower edge exactly on the collision line, so the
     // surface the blade meets is always visible even where the landmark art is narrow or transparent
     const bx = this.worldW / 2 - this.laneGap * 1.5, bw = this.laneGap * 3, beam = 6;

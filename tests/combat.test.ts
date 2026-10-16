@@ -32,7 +32,7 @@ describe('combo, score, special (spec §7)', () => {
     expect(s.combo).toBe(0);
   });
 
-  it('T15/T16 special at 99 does nothing; at 100 it clears every floor and empties the gauge', () => {
+  it('T15/T16 special at 99 does nothing; at 100 it empties the gauge, stops collision, then sweeps every floor away', () => {
     const s = playing(building(tall(8)));
     s.special = 99;
     expect(special(s)).toBe(false);
@@ -40,9 +40,14 @@ describe('combo, score, special (spec §7)', () => {
     s.special = 100;
     expect(special(s)).toBe(true);
     expect(s.special).toBe(0);
-    expect(s.building!.floors).toHaveLength(0);
+    expect(s.building!.collisionDisabled).toBe(true);
     expect(s.destroyedBuildings).toBe(1);
-    expect(s.phase).toBe('SPECIAL_CUTIN');
+    expect(s.phase).toBe('SPECIAL');
+    const b = s.building!;
+    for (let t = 0; t < 2 && s.phase === 'SPECIAL'; t += DT) tick(s, DT);
+    expect(b.floors).toHaveLength(0);
+    expect(b.defeated).toBe(true);
+    expect(s.phase).toBe('WAVE_TRANSITION');
   });
 
   it('T27 special pays each floor once at 65% and never twice', () => {
@@ -62,7 +67,7 @@ describe('combo, score, special (spec §7)', () => {
     tick(s, DT, { ...NO_INPUT }); // X held but not newly pressed: nothing
     expect(s.building!.floors).toHaveLength(5);
     tick(s, DT, { ...NO_INPUT, specialPressed: true });
-    expect(s.phase).toBe('SPECIAL_CUTIN');
+    expect(s.phase).toBe('SPECIAL');
   });
 
   it('T17 the building touching the ground during the special costs no life', () => {
@@ -108,9 +113,9 @@ describe('lives, pause and restart', () => {
 
   it('T28 a new run resets lives, score and gauges', () => {
     const s = newRun(1);
-    s.score = 999; s.lives = 0; s.special = 80; s.guard = 10; s.combo = 9;
+    s.score = 999; s.lives = 0; s.special = 80; s.combo = 9; s.damageSequences = 2;
     startRun(s, 2);
-    expect([s.lives, s.score, s.special, s.guard, s.combo, s.phase]).toEqual([3, 0, 0, 100, 0, 'COUNTDOWN']);
+    expect([s.lives, s.score, s.special, s.combo, s.damageSequences, s.phase]).toEqual([3, 0, 0, 0, 0, 'COUNTDOWN']);
   });
 
   it('the countdown hands over to the first building within about a second', () => {

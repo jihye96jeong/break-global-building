@@ -72,9 +72,8 @@ describe('jump (v2 §3)', () => {
 });
 
 /** Ground guard pressed while the building is `gap` wu above the sword plane; returns the tick log. */
-function guardRun(gap: number, opts: { air?: boolean; secs?: number; guard?: number } = {}) {
+function guardRun(gap: number, opts: { air?: boolean; secs?: number } = {}) {
   const s = playing(building(tall(6), 0));
-  if (opts.guard !== undefined) s.guard = opts.guard;
   if (opts.air) { s.player.y = 100; s.player.vy = 0; }
   const b = s.building!;
   b.bottomY = guardPlaneY(s) - gap;
@@ -94,7 +93,8 @@ describe('guard contact (v2 §4)', () => {
     b.bottomY = guardPlaneY(s) - 200;
     const before = b.bottomY, v = b.velocityY;
     tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: true });
-    expect(s.guardPhase).toBe('READY');
+    expect(s.guardPhase).toBe('OFF');
+    expect(s.player.guarding).toBe(true); // the pose only
     expect(b.bottomY).toBeCloseTo(before + v * DT, 5); // only its own fall
     expect(b.velocityY).toBe(v);
   });
@@ -159,20 +159,13 @@ describe('guard contact (v2 §4)', () => {
     expect(s.lives).toBe(3);
   });
 
-  it('GF-12 not enough gauge: no push, guard break, and the crush still happens', () => {
-    const { s, log } = guardRun(4, { guard: 5, secs: 1.5 });
-    expect(log.some((l) => l.phase === 'HOLD')).toBe(false);
-    expect(s.lives).toBe(2);
-  });
-
-  it('GF-13 holding or mashing guard spends the gauge once per contact and pushes once', () => {
+  it('GF-13 holding or mashing guard: one success per contact episode', () => {
     const s = playing(building(tall(6), 0));
     const b = s.building!;
     b.bottomY = guardPlaneY(s) - 10;
     let contacts = 0;
-    for (let i = 0; i < 40; i++) { tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: i % 2 === 0 }); contacts += takeEvents(s).filter((e) => e.t === 'guardContact').length; }
+    for (let i = 0; i < 30; i++) { tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: i % 2 === 0 }); contacts += takeEvents(s).filter((e) => e.t === 'guardContact').length; }
     expect(contacts).toBe(1);
-    expect(s.guard).toBeGreaterThanOrEqual(100 - BALANCE.ground.cost - 12);
   });
 
   it('GF-14 ground guard resets the combo; air guard keeps it', () => {

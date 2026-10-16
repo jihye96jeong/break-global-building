@@ -23,6 +23,7 @@
         </div>
         <div class="hud-right">
           <div class="where"><b id="tier">TIER 1 · EASY</b><span id="bname"></span><span class="next"><span data-i18n="next"></span>: <b id="next-name"></b></span></div>
+          <button id="btn-keys" class="icon-btn" data-i18n-aria="help">?</button>
           <button id="btn-mute" class="icon-btn" data-i18n-aria="mute" aria-pressed="false">♪</button>
           <button id="btn-pause" class="icon-btn" data-i18n-aria="pause">Ⅱ</button>
         </div>
@@ -31,8 +32,7 @@
       <div id="hint" class="hint hidden" role="status"></div>
 
       <footer id="status" class="hidden">
-        <div class="gauge guard"><span class="g-lbl">GUARD</span><div class="g-track"><div id="guard-fill"></div></div><span id="guard-pct">100%</span></div>
-        <p id="keyguide" data-i18n="keyGuide"></p>
+        <p id="keyguide" class="control-hints"></p>
         <div class="gauge special" id="special-wrap"><span class="g-lbl">SPECIAL</span><div class="g-track"><div id="special-fill"></div></div><span id="special-pct">0%</span><span id="special-ready" class="ready hidden">SPECIAL READY</span></div>
       </footer>
 
@@ -79,6 +79,7 @@
       <section id="ov-pause" class="overlay hidden">
         <div class="panel center">
           <h2 data-i18n="paused"></h2>
+          <p id="pause-keys" class="control-hints pause-keys"></p>
           <button id="btn-resume" class="big-btn" data-i18n="resume"></button>
           <div class="row">
             <button id="btn-pause-sound" class="small-btn sound-toggle"></button>

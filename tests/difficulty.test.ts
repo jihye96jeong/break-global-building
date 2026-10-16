@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { speedMultiplier, tierFor, TIERS } from '../src/config/balance';
+import { fallSpeedFor, tierFor, TIERS } from '../src/config/balance';
 import { generateFloorHp, spawnBuilding } from '../src/core/building';
 import { makeRng } from '../src/core/rng';
 
@@ -8,18 +8,30 @@ describe('difficulty (spec §8)', () => {
     expect(tierFor(2).tier).toBe(1);
     expect(tierFor(3).tier).toBe(2);
     const b2 = spawnBuilding(7, 3, 2, []), b3 = spawnBuilding(7, 4, 3, []);
-    expect(b2.baseSpeed).toBeCloseTo(115);
-    expect(b3.baseSpeed).toBeCloseTo(115 * 1.2);
+    expect(b2.baseSpeed).toBe(190); // v4 absolute speeds
+    expect(b3.baseSpeed).toBe(240);
     expect(b3.floors.length).toBeGreaterThanOrEqual(4);
     expect(b3.floors.length).toBeLessThanOrEqual(7);
   });
 
-  it('T09 Tier 6 from 20 buildings, speed grows from 2.0 and never passes 2.4', () => {
+  it('T09 / v4 §4.2 absolute fall speeds 190 → 240 → 300 → 390 → 490 → 600, tier 6 capped at 650, never multiplied twice', () => {
     expect(tierFor(19).tier).toBe(5);
     expect(tierFor(20).tier).toBe(6);
-    expect(speedMultiplier(20)).toBe(2.0);
-    expect(speedMultiplier(23)).toBeCloseTo(2.05);
-    expect(speedMultiplier(1000)).toBe(2.4);
+    expect([0, 2, 3, 5, 6, 9, 10, 14, 15, 19, 20].map(fallSpeedFor)).toEqual([190, 190, 240, 240, 300, 300, 390, 390, 490, 490, 600]);
+    expect(fallSpeedFor(23)).toBe(630);
+    expect(fallSpeedFor(1000)).toBe(650);
+    for (const d of [0, 3, 6, 10, 15, 20, 40]) expect(spawnBuilding(5, 9, d, []).baseSpeed).toBe(fallSpeedFor(d));
+  });
+
+  it('v4 §4.3 spawn → first guard contact time (TTC) is inside each tier band', () => {
+    const band: Record<number, [number, number]> = { 1: [1.6, 2.3], 2: [1.1, 1.7], 3: [1.1, 1.7], 4: [0.75, 1.2], 5: [0.75, 1.2], 6: [0.5, 0.8] };
+    for (const d of [0, 2, 3, 6, 9, 10, 15, 19, 20, 25, 60]) for (let i = 1; i < 30; i++) {
+      const b = spawnBuilding(11, i, d, []);
+      const ttc = (530 - 62 - 8 - b.bottomY) / b.baseSpeed;
+      const [lo, hi] = band[b.tier];
+      expect(ttc).toBeGreaterThanOrEqual(lo - 0.03);
+      expect(ttc).toBeLessThanOrEqual(hi);
+    }
   });
 
   it('tier boundaries match the table', () => {

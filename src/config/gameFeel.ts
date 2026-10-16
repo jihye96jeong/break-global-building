@@ -34,21 +34,29 @@ export const CONTACT = {
 
 export const GUARD_FEEL = {
   guardReachAboveHead: 8, // guard pose: the raised flat blade is 8 wu above the head
-  readyWindowMs: 180, // one press arms the guard this long; holding longer does nothing (no auto-guard)
-  preContactBufferMs: 70, // a press released early still counts if contact comes within this
   braceCompression: { ground: 4, air: 2.5 },
   braceCompressionMs: 35,
   holdMs: { ground: 120, air: 100 },
   repelUnits: { ground: 36, air: 18 },
   repelMs: { ground: 170, air: 140 },
   releaseBlendMs: 70,
-  contactCooldownMs: 280,
   counterWindowMs: 500, // a real re-contact hit this soon after the push shows COUNTER! (no extra damage)
 };
 
 export const ATTACK_FEEL = {
   intervalMs: 95,
   swingVariants: 3,
+};
+
+/** v4 §7: special = charge → slash sweeps bottom→top bursting each floor → top finish → quick return (≈1.0–1.45 s). */
+export const SPECIAL_SEQ = {
+  chargeMs: 110,
+  sweepBaseMs: 380,
+  sweepPerFloorMs: 28,
+  sweepMinMs: 460,
+  sweepMaxMs: 820,
+  finishStopMs: 70,
+  returnMs: 360,
 };
 
 export const HITSTOP_MS = { hit: 28, floor: 52, building: 70, special: 75 };
