@@ -518,6 +518,62 @@
       "source": "art-source/building/basic_apartment.jpg",
       "bytes": 325857,
       "success": true
+    },
+    "building:basic_clocktower": {
+      "id": "basic_clocktower",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable town clock tower in a generic old town: a slender brick town clock tower with a big round clock face near the top (no numbers), a small arched belfry and a pointed copper roof. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "1:2",
+      "resolution": "1k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:41:50.146Z",
+      "source": "art-source/building/basic_clocktower.jpg",
+      "bytes": 216829,
+      "success": true
+    },
+    "background:sky_golden": {
+      "id": "sky_golden",
+      "type": "background",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA colorful illustrated atmospheric background plate for an arcade game: a warm golden late-afternoon sky, low sun behind thin clouds, long soft light over a distant generic low city skyline. Everything in the scenery stays low and small in the bottom quarter; the rest is open sky. No dominant landmark, no tall tower, no characters, no interface, no text, no watermark. Wide horizontal 16:9 composition.",
+      "aspect_ratio": "16:9",
+      "resolution": "2k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:43:38.284Z",
+      "source": "art-source/background/sky_golden.png",
+      "bytes": 3287049,
+      "success": true
+    },
+    "background:sky_twilight": {
+      "id": "sky_twilight",
+      "type": "background",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA colorful illustrated atmospheric background plate for an arcade game: a purple and pink twilight sky just after sunset, the first stars, distant generic low city skyline with a few lit windows. Everything in the scenery stays low and small in the bottom quarter; the rest is open sky. No dominant landmark, no tall tower, no characters, no interface, no text, no watermark. Wide horizontal 16:9 composition.",
+      "aspect_ratio": "16:9",
+      "resolution": "2k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:45:15.712Z",
+      "source": "art-source/background/sky_twilight.png",
+      "bytes": 3055505,
+      "success": true
+    },
+    "background:sky_deepnight": {
+      "id": "sky_deepnight",
+      "type": "background",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA colorful illustrated atmospheric background plate for an arcade game: a very dark navy deep-night sky full of stars and a pale moon, faint distant lightning glow on the horizon, distant generic city skyline with many tiny lit windows. Everything in the scenery stays low and small in the bottom quarter; the rest is open sky. No dominant landmark, no tall tower, no characters, no interface, no text, no watermark. Wide horizontal 16:9 composition.",
+      "aspect_ratio": "16:9",
+      "resolution": "2k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:46:39.567Z",
+      "source": "art-source/background/sky_deepnight.png",
+      "bytes": 3441335,
+      "success": true
     }
   },
   "note": "art-source files were re-encoded to WebP (buildings/characters lossless) after download to keep the repo small"

@@ -100,6 +100,13 @@ export class Renderer {
       g.strokeStyle = 'rgba(255,90,70,.7)'; g.lineWidth = 2;
       for (let i = -2; i <= 2; i++) { const xx = x + i * 14, yy = GROUND_Y - BALANCE.heroHeight - p.y - 10 - Math.abs(i) * 3; g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx + i * 3, yy - 10); g.stroke(); }
     }
+    // night levels: a soft light pool keeps the dark ninja readable against the dark city (render only)
+    if (f.story && f.story.stage.level >= 6 && s.phase !== 'BURIED') {
+      const hy = GROUND_Y - p.y - BALANCE.heroHeight / 2;
+      const lg = g.createRadialGradient(x, hy, 4, x, hy, 70);
+      lg.addColorStop(0, 'rgba(190,225,255,.42)'); lg.addColorStop(0.55, 'rgba(150,200,255,.16)'); lg.addColorStop(1, 'rgba(150,200,255,0)');
+      g.fillStyle = lg; g.fillRect(x - 70, hy - 70, 140, 140);
+    }
     if (s.phase !== 'BURIED') drawHero(g, { // buried: the hero is completely under the building
       x, y: p.y, facing: p.facing,
       attackK: p.attackAnimMs > 0 ? 1 - p.attackAnimMs / BALANCE.attackAnimMs : -1,
@@ -296,7 +303,7 @@ export class Renderer {
         g.fillRect(x - px * 3, y, 1.6, 1.6);
       }
     }
-    if (st.moon) {
+    if (st.moon && !img) { // the night plates have their own moon
       g.fillStyle = '#f4f1dc'; g.beginPath(); g.arc(W * 0.16, 80, 24, 0, Math.PI * 2); g.fill();
       g.fillStyle = st.palette.skyTop; g.beginPath(); g.arc(W * 0.16 + 10, 74, 21, 0, Math.PI * 2); g.fill();
     }
