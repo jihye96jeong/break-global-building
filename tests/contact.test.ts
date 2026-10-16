@@ -286,7 +286,13 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     expect(s.combo).toBe(7);
     const y0 = b.bottomY;
     let hold = 0;
-    while (s.guardPhase === 'HOLD') { step(s); hold += DT * 1000; expect(b.bottomY).toBe(y0); expect(s.player.vy).toBeLessThan(0); } // the building is pinned; the hero drops away
+    let landedMs = -1;
+    while (s.guardPhase === 'HOLD') {
+      step(s); hold += DT * 1000; expect(b.bottomY).toBe(y0);
+      expect(s.player.y === 0 || s.player.vy < 0).toBe(true); // the building is pinned; the hero is knocked straight down
+      if (landedMs < 0 && s.player.y === 0) landedMs = hold;
+    }
+    expect(landedMs).toBeGreaterThan(0); expect(landedMs).toBeLessThanOrEqual(120); // from 100 wu up: on the ground in ~0.1 s
     expect(hold).toBeGreaterThanOrEqual(160); expect(hold).toBeLessThanOrEqual(190);
     while (s.guardPhase === 'REPEL') step(s);
     expect(y0 - b.bottomY).toBeCloseTo(18, 5);
