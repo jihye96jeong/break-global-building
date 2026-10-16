@@ -32,7 +32,6 @@ export const BALANCE = {
   buriedSlamMs: 90, // crushed: the building slams onto the ground over the hero…
   buriedMinMs: 160, // …an attack press after this breaks the floor on top of them…
   escapeLaunchMs: 300, // …and the building is blasted back up to its spawn height over this time
-  gameOverAfterMs: 700, // no lives left: game over after the slam
   invulnAfterHitMs: 1250,
 
   // guard (v4: unlimited — no gauge, no cost, no cooldown)

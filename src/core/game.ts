@@ -107,6 +107,7 @@ export interface PlayerState {
   moveRepeatMs: number;
   guarding: boolean; // guard pose shown (↓ held / pressed, or bracing)
   clinging: boolean; // airborne and stuck to the building's underside
+  dropping: boolean; // after an air guard: straight back down to the ground, no clinging
   clingMs: number;
 }
 
@@ -173,7 +174,7 @@ export interface RunState {
 export function newPlayer(): PlayerState {
   return { lane: 1, laneFrom: 1, laneAnimMs: 0, y: 0, vy: 0, peakY: 0, jumpElapsed: 0, jumpCut: false, jumpBufferMs: 0, landMs: 0,
     facing: 1, attackCooldownMs: 0, attackAnimMs: 0, bufferedAttackMs: 0, swingCount: 0, swing: null, moveRepeatMs: 0,
-    guarding: false, clinging: false, clingMs: 0 };
+    guarding: false, clinging: false, clingMs: 0, dropping: false };
 }
 
 export function newRun(seed: number): RunState {
@@ -498,7 +499,7 @@ function clampUnderBuilding(s: RunState) {
   if (p.y >= maxY - 0.001) {
     p.y = maxY; if (p.vy > 0) p.vy = 0;
     // reaching the underside in the air: stick to it (so attack and guard keep touching it)
-    if (maxY > 0 && !p.clinging) { p.clinging = true; p.clingMs = JUMP_FEEL.clingMs; }
+    if (maxY > 0 && !p.clinging && !p.dropping) { p.clinging = true; p.clingMs = JUMP_FEEL.clingMs; }
   }
 }
 
@@ -517,8 +518,6 @@ function updateJump(s: RunState, dt: number, input: Intents) {
   if (input.jumpPressed) p.jumpBufferMs = JUMP_FEEL.jumpBuffer * 1000;
   else p.jumpBufferMs = Math.max(0, p.jumpBufferMs - ms);
 
-  // bracing under the building during an air guard hold: the hero stays glued to the contact point
-  if (s.guardPhase === 'HOLD' && s.guardContact?.kind === 'air') return;
 
   // stuck to the underside: ride it for a moment, and as long as Z or ↓ is held; jump again (or let go) to drop
   if (p.clinging) {
@@ -546,7 +545,7 @@ function updateJump(s: RunState, dt: number, input: Intents) {
     p.y += p.vy * dt;
     if (p.y > p.peakY) p.peakY = p.y;
     if (p.y <= 0) {
-      p.y = 0; p.vy = 0; p.landMs = JUMP_FEEL.landingSquashMs; p.clinging = false;
+      p.y = 0; p.vy = 0; p.landMs = JUMP_FEEL.landingSquashMs; p.clinging = false; p.dropping = false;
       s.events.push({ t: 'land', fromHeight: p.peakY });
     }
   }
@@ -600,8 +599,10 @@ function resolveGuardContact(s: RunState, prev: Snapshot, dt: number) {
   if (p.swing) p.swing.consumed = true; // guard wins a same-tick attack
   if (air) {
     if (s.combo > 0) s.comboMs += BALANCE.air.comboExtendMs;
-    p.vy = 0;
-    p.y = Math.max(0, GROUND_Y - BALANCE.heroHeight - GUARD_FEEL.guardReachAboveHead - contactY); // blade glued to the underside
+    // CLANG — and the hero kicks off the underside straight back down to the ground (no staying up there)
+    p.y = Math.max(0, GROUND_Y - BALANCE.heroHeight - GUARD_FEEL.guardReachAboveHead - contactY);
+    p.vy = -JUMP_FEEL.airGuardDropVelocity;
+    p.clinging = false; p.dropping = true;
   } else breakCombo(s);
   s.contact.lastEvent = 'GUARD_CONTACT';
   s.contact.contactId = segmentId;
@@ -702,7 +703,7 @@ function resolveCrush(s: RunState) {
   endGuard(s);
   const p = s.player;
   p.swing = null; p.bufferedAttackMs = 0; p.guarding = false; p.attackAnimMs = 0;
-  p.y = 0; p.vy = 0; p.laneFrom = p.lane; p.laneAnimMs = 0; p.clinging = false;
+  p.y = 0; p.vy = 0; p.laneFrom = p.lane; p.laneAnimMs = 0; p.clinging = false; p.dropping = false;
   s.contact.lastEvent = 'CRUSH';
   s.events.push({ t: 'crushed', bottomY: b.bottomY, landmarkId: b.landmarkId, air: false });
 }
@@ -717,11 +718,13 @@ function updateBuried(s: RunState, ms: number, input: Intents) {
   const slam = Math.min(1, q.elapsedMs / BALANCE.buriedSlamMs);
   b.bottomY = lerp(q.fromY, GROUND_Y, slam * slam);
   if (slam >= 1 && q.elapsedMs - ms < BALANCE.buriedSlamMs) s.events.push({ t: 'buried' });
+  // buried is never ended by time: the hero stays under the building, alive, until the player presses attack
+  if (input.attackPressed) s.player.bufferedAttackMs = CONTACT.attackBufferMs;
   if (s.lives <= 0) {
-    if (q.elapsedMs >= BALANCE.gameOverAfterMs) { s.phase = 'GAME_OVER'; s.building = null; s.buried = null; s.events.push({ t: 'gameOver', score: s.score }); }
+    // no lives left: the attack press ends the run (nothing else, and no timer, ever does)
+    if (q.elapsedMs >= BALANCE.buriedMinMs && s.player.bufferedAttackMs > 0) { s.phase = 'GAME_OVER'; s.building = null; s.buried = null; s.events.push({ t: 'gameOver', score: s.score }); }
     return;
   }
-  if (input.attackPressed) s.player.bufferedAttackMs = CONTACT.attackBufferMs;
   if (q.elapsedMs < BALANCE.buriedMinMs || s.player.bufferedAttackMs <= 0) return;
   // break out: the floor on top of the hero is smashed and the rest is blasted back up
   s.player.bufferedAttackMs = 0;

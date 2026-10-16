@@ -275,7 +275,7 @@ function onEvent(e: GameEvent) {
       fx.smoke(lx, GROUND_Y, 12, 'rgba(232,222,204,', 1.2);
       kick(CAMERA_FEEL.building, 0, 1);
       audio.play('stone'); audio.play('crumble');
-      if (state.lives > 0) showHint(t('escapeHint'), 1600);
+      showHint(t(state.lives > 0 ? "escapeHint" : "escapeLast"), 1600);
       break;
     }
     case 'buriedBreak': {

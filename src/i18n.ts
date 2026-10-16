@@ -48,6 +48,7 @@ const ko = {
   rotate: '가로로 돌리면 더 넓게 볼 수 있어요',
   floors: '층',
   escapeHint: 'Z 를 눌러 건물을 부수고 탈출!',
+  escapeLast: '마지막 목숨! Z 를 누르면 결과 화면',
 };
 export type Key = keyof typeof ko;
 
@@ -95,6 +96,7 @@ const en: Record<Key, string> = {
   rotate: 'Turn your phone sideways for a wider view',
   floors: 'floors',
   escapeHint: 'Press Z to smash your way out!',
+  escapeLast: 'Last life gone — press Z for the results',
 };
 
 const ja: Record<Key, string> = {
@@ -141,6 +143,7 @@ const ja: Record<Key, string> = {
   rotate: '横向きにすると広く見られます',
   floors: '階',
   escapeHint: 'Z で建物をこわして脱出!',
+  escapeLast: '最後の命! Z で結果画面へ',
 };
 
 const zh: Record<Key, string> = {
@@ -187,6 +190,7 @@ const zh: Record<Key, string> = {
   rotate: '横屏可以看得更宽',
   floors: '层',
   escapeHint: '按 Z 砸碎大楼逃出来!',
+  escapeLast: '最后一条命! 按 Z 查看结果',
 };
 
 const DICT: Record<Lang, Record<Key, string>> = { ko, en, ja, zh };

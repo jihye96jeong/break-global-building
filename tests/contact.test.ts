@@ -259,10 +259,12 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     expect(s.combo).toBe(7);
     const y0 = b.bottomY;
     let hold = 0;
-    while (s.guardPhase === 'HOLD') { step(s); hold += DT * 1000; expect(Math.abs(guardPlaneY(s) - b.bottomY)).toBeLessThanOrEqual(2); }
+    while (s.guardPhase === 'HOLD') { step(s); hold += DT * 1000; expect(b.bottomY).toBe(y0); expect(s.player.vy).toBeLessThan(0); } // the building is pinned; the hero drops away
     expect(hold).toBeGreaterThanOrEqual(90); expect(hold).toBeLessThanOrEqual(115);
     while (s.guardPhase === 'REPEL') step(s);
     expect(y0 - b.bottomY).toBeCloseTo(18, 5);
+    for (let i = 0; i < 30 && s.player.y > 0; i++) step(s);
+    expect(s.player.y).toBe(0); // straight back down to the ground, no clinging after the guard
   });
 
   it('GD-13 guarding gives no score, combo or special', () => {
@@ -390,10 +392,13 @@ describe('CR — crush: one life, the hero buried under the building, Z breaks o
     expect(s.building!.id).not.toBe('test');
   });
 
-  it('CR-05 the last life → buried → GAME OVER, no escape and no next building', () => {
+  it('CR-05 the last life → buried, alive and waiting with no timer; only the attack press ends the run', () => {
     const s = crush();
     s.lives = 1;
-    for (let i = 0; i < 90; i++) step(s, { attack: i > 30, attackPressed: i > 30 });
+    untilBuried(s);
+    for (let i = 0; i < 600; i++) step(s, { guard: true, jump: true }); // 10 s buried: nothing happens
+    expect(s.phase).toBe('BURIED');
+    for (let i = 0; i < 5; i++) step(s, { attack: true, attackPressed: true });
     expect(s.lives).toBe(0);
     expect(s.phase).toBe('GAME_OVER');
     expect(s.building).toBeNull();

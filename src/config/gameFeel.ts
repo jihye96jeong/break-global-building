@@ -11,6 +11,7 @@ export const JUMP_FEEL = {
   landingSquashMs: 100,
   takeoffStretchMs: 100,
   clingMs: 300, // an airborne hero who reaches the underside sticks to it this long (and while Z or ↓ is held)
+  airGuardDropVelocity: 260, // wu/s down: after an air guard the hero drops straight back to the ground
   homingOvershoot: 10, // wu: a leap toward a high building aims a little past its underside so it always touches
 };
 
