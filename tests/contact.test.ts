@@ -659,6 +659,24 @@ describe('STICK — the hero never hangs on the underside', () => {
     }
   });
 
+  it('STICK-03 ↓ tapped a moment before the jump reaches the building still guards it (no hanging there)', () => {
+    const s = playing(building(tall(6), 330));
+    const b = s.building!;
+    b.baseSpeed = b.velocityY = 60;
+    step(s, { jump: true, jumpPressed: true });
+    for (let i = 0; i < 4; i++) step(s);
+    expect(s.player.y).toBeGreaterThan(0);
+    expect(s.guardContacts).toBe(0);
+    step(s, { guardPressed: true }); // a quick tap while still rising, released at once
+    let i = 0;
+    while (s.guardContacts === 0 && i++ < 20) step(s);
+    expect(s.guardContacts).toBe(1); // caught on arrival
+    expect(s.player.clinging).toBe(false);
+    let t = 0;
+    while (s.player.y > 0 && t < 1) { step(s); t += DT; }
+    expect(t).toBeLessThan(0.25); // and straight back down
+  });
+
   it('STICK-02 ↓ held but the guard already used: touching the building drops the hero at once', () => {
     const s = playing(building(tall(6), 300));
     const b = s.building!;

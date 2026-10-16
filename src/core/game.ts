@@ -174,6 +174,8 @@ export interface RunState {
   guardContacts: number; // successful guard episodes (unlimited)
   guardHeld: boolean; // debug: ↓ held this tick
   guardPressedThisTick: boolean;
+  /** a ↓ tap stays armed this long (ms), so a press a moment before the building arrives still guards it */
+  guardBufferMs: number;
   damageSequences: number;
   specialSeq: SpecialSeq | null;
   buried: { elapsedMs: number; fromY: number } | null;
@@ -201,7 +203,7 @@ export function newRun(seed: number): RunState {
   return {
     mode: 'endless', story: null, phase: 'TITLE', pausedFrom: null, phaseMs: 0, timeMs: 0, seed, buildingIndex: 0, destroyedBuildings: 0,
     recentLandmarks: [], building: null, lives: BALANCE.lives, score: 0, combo: 0, comboMs: 0, maxCombo: 0,
-    special: 0, guardPhase: 'OFF', guardSpent: false, guardContact: null, guardHeld: false, guardPressedThisTick: false, damageSequences: 0, specialSeq: null, buried: null, escape: null,
+    special: 0, guardPhase: 'OFF', guardSpent: false, guardContact: null, guardHeld: false, guardPressedThisTick: false, guardBufferMs: 0, damageSequences: 0, specialSeq: null, buried: null, escape: null,
     guardContacts: 0, lastGuardAtMs: -1e9, swingIds: 0, contact: { attackGap: NaN, guardGap: NaN, toi: null, xOverlap: false, lastEvent: '', contactId: '' }, invulnMs: 0, freezeMs: 0, dangerWarned: '', chainLane: -1, chainCount: 0,
     player: newPlayer(), events: [], countdown: 3,
   };
@@ -603,11 +605,12 @@ function updateJump(s: RunState, dt: number, input: Intents) {
     const b = s.building;
     p.clingMs -= ms;
     const ceil = b && !b.defeated && !b.collisionDisabled ? Math.max(0, DANGER_Y - poseReach(s) - b.bottomY) : 0;
-    const spentGuard = (input.guard || input.guardPressed) && (s.guardSpent || s.guardPhase !== 'OFF'); // ↓ that can't guard now
+    const spentGuard = (input.guard || input.guardPressed || s.guardBufferMs > 0) && (s.guardSpent || s.guardPhase !== 'OFF'); // ↓ that can't guard now
     const keep = p.clingMs > 0 && !p.dropping && !spentGuard; // ↑ while stuck up there does nothing (never a drop)
     if (keep && ceil > 0 && p.y > 0) { p.y = ceil; p.vy = 0; p.peakY = Math.max(p.peakY, p.y); return; }
     p.clinging = false;
-    if (spentGuard && p.y > 0) { p.dropping = true; p.airLeap = true; p.vy = Math.min(p.vy, -JUMP_FEEL.airGuardDropVelocity); }
+    // letting go: straight down (no floaty start from rest under the building)
+    if (p.y > 0) { p.dropping = true; p.airLeap = true; p.vy = Math.min(p.vy, -(spentGuard ? JUMP_FEEL.airGuardDropVelocity : JUMP_FEEL.clingReleaseVelocity)); }
   }
 
   // jump: a fresh (or buffered) press, or ↑ still held on the ground — up again with no pause after landing
@@ -641,12 +644,14 @@ function updateJump(s: RunState, dt: number, input: Intents) {
 }
 
 // ---------------------------------------------------------------- guard: one block per ↓ press, always on real contact
-function updateGuardInput(s: RunState, input: Intents) {
+function updateGuardInput(s: RunState, input: Intents, ms = 0) {
   // ↓ let go, or pressed afresh: the next contact guards again
   if (!input.guard || input.guardPressed) s.guardSpent = false;
-  const live = (input.guard || input.guardPressed) && !s.guardSpent;
+  s.guardBufferMs = input.guardPressed ? GUARD_FEEL.pressBufferMs : Math.max(0, s.guardBufferMs - ms);
+  const armed = s.guardBufferMs > 0 && !s.guardSpent; // a recent tap, still waiting for the building
+  const live = ((input.guard || input.guardPressed) && !s.guardSpent) || armed;
   s.guardHeld = live && input.guard;
-  s.guardPressedThisTick = input.guardPressed && live;
+  s.guardPressedThisTick = live && (input.guardPressed || armed);
   s.player.guarding = live || bracing(s);
 }
 
@@ -687,7 +692,8 @@ function resolveGuardContact(s: RunState, prev: Snapshot, dt: number) {
   const segmentId = `${b.id}:${b.floors[0]?.id ?? 'x'}:${p.lane}:${s.guardContacts}`; // contact episode key
   s.guardContact = { id: s.guardContacts, kind, phaseMs: 0, repelTravelled: 0, contactY, segmentId };
   s.guardPhase = 'HOLD';
-  s.guardSpent = true; // this press is used up: holding ↓ never blocks a second time
+  s.guardSpent = true;
+  s.guardBufferMs = 0; // this press is used up: holding ↓ never blocks a second time
   if (p.swing) p.swing.consumed = true; // guard wins a same-tick attack
   if (air) {
     if (s.combo > 0) s.comboMs += BALANCE.air.comboExtendMs;
@@ -900,7 +906,7 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
       // the next building waits for the hero to land, so ↑ does not launch here (a press is still buffered)
       updateJump(s, dt, { ...input, jump: false, jumpPressed: false });
       if (input.jumpPressed) p.jumpBufferMs = JUMP_FEEL.jumpBuffer * 1000;
-      updateGuardInput(s, input);
+      updateGuardInput(s, input, ms);
       if (input.attackPressed) p.bufferedAttackMs = CONTACT.attackBufferMs;
       if (s.phaseMs <= 0 && s.player.y <= 0) s.phase = 'PLAYING'; // the new building waits until the hero has landed
       return;
@@ -934,6 +940,7 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
   if (s.freezeMs > 0) {
     if (input.attackPressed) p.bufferedAttackMs = CONTACT.attackBufferMs;
     if (input.jumpPressed) p.jumpBufferMs = JUMP_FEEL.jumpBuffer * 1000;
+    if (input.guardPressed) { s.guardBufferMs = GUARD_FEEL.pressBufferMs; s.guardSpent = false; }
     if (input.specialPressed) special(s);
     if (s.freezeMs >= ms - 1e-9 || s.phase !== 'PLAYING') { s.freezeMs = Math.max(0, s.freezeMs - ms); return; }
     ms -= s.freezeMs;
@@ -944,7 +951,7 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
   const prev = snapshot(s);
   if (p.swing) p.swing.elapsedMs += ms;
   updateLanes(s, ms, input);
-  updateGuardInput(s, input);
+  updateGuardInput(s, input, ms);
   if (input.specialPressed && special(s)) return; // 1) special: global, no contact needed
   updateJump(s, dt, input);
   handleAttackInput(s, input);

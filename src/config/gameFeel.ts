@@ -11,6 +11,7 @@ export const JUMP_FEEL = {
   landingSquashMs: 100,
   takeoffStretchMs: 100,
   clingMs: 300, // an airborne hero who reaches the underside sticks to it this long (and while Z or ↓ is held)
+  clingReleaseVelocity: 600, // wu/s down when the 0.3 s cling under a building ends
   airGuardDropVelocity: 1100, // wu/s down: the recoil of an air guard slams the hero straight back to the ground
   landNowVelocity: 900, // wu/s down: after a floor breaks (or a new building comes) the hero drops straight to the ground
   homingOvershoot: 10, // wu: a leap toward a high building aims a little past its underside so it always touches
@@ -50,6 +51,7 @@ export const GUARD_FEEL = {
   repelUnits: { ground: 36, air: 18 },
   repelMs: { ground: 170, air: 140 },
   releaseBlendMs: 70,
+  pressBufferMs: 250, // a ↓ tap stays armed this long: pressed a little early, it still guards on contact
   postGuardSlowFactor: 0.15, // after the push it comes back down much slower (this share of its fall speed)…
   postGuardSlowMin: 35, // …at least this (wu/s)…
   postGuardSlowMs: 1300, // …for this long, then speeds back up to its normal fall
