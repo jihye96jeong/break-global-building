@@ -86,3 +86,16 @@ export function resolveStageFallSpeed(stage: StoryStage, waveIndex: number) {
   const t = Math.min(1, Math.max(0, waveIndex / last));
   return Math.min(MAX_FALL_SPEED, Math.round(stage.baseFallSpeed * (1 + 0.04 * t)));
 }
+
+export const TIME_NAMES: Record<TimeOfDay, { ko: string; en: string; ja: string; zh: string }> = {
+  morning: { ko: '오전', en: 'Morning', ja: '朝', zh: '上午' },
+  noon: { ko: '한낮', en: 'Midday', ja: '昼', zh: '正午' },
+  afternoon: { ko: '오후', en: 'Afternoon', ja: '午後', zh: '下午' },
+  golden_hour: { ko: '황금빛 늦은 오후', en: 'Golden hour', ja: '夕方の金色', zh: '金色傍晚' },
+  sunset: { ko: '노을', en: 'Sunset', ja: '夕焼け', zh: '日落' },
+  twilight: { ko: '땅거미', en: 'Twilight', ja: '黄昏', zh: '暮色' },
+  evening: { ko: '저녁', en: 'Evening', ja: '夜のはじまり', zh: '傍晚' },
+  night: { ko: '밤', en: 'Night', ja: '夜', zh: '夜晚' },
+  midnight: { ko: '자정', en: 'Midnight', ja: '真夜中', zh: '午夜' },
+  deep_night: { ko: '깊은 밤', en: 'Deep night', ja: '深夜', zh: '深夜' },
+};

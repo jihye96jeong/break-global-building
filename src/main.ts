@@ -4,9 +4,12 @@ import { BALANCE, DANGER_Y, GROUND_Y } from './config/balance';
 import { CAMERA_FEEL, COMBO_TIERS, DEBRIS_FEEL } from './config/gameFeel';
 import { LANDMARKS, landmarkById } from './config/landmarks';
 import { buildingRng, pickLandmark } from './core/building';
-import { attackSurfaceY, guardPlaneY, heroLanePos, newRun, pause, resume, startRun, takeEvents, tick, tierOf, type GameEvent, type RunState } from './core/game';
+import { attackSurfaceY, guardPlaneY, heroLanePos, newRun, pause, resume, skipIntro, startRun, startStoryRun, storyStage, takeEvents, tick, tierOf, type GameEvent, type RunState } from './core/game';
+import { WorldMap } from './story/map-ui';
+import { canEnterStoryLevel, StoryStore } from './story/progress';
+import { STORY_LEVELS, STORY_STAGES, stageFor } from './story/stages';
 import { loadSave, recordRun, writeSave } from './core/persistence';
-import { applyDom, lang, LANG_LABEL, LANGS, onLangChange, setLang, t, type Lang } from './i18n';
+import { applyDom, lang, LANG_LABEL, LANGS, onLangChange, setLang, t, tf, type Lang } from './i18n';
 import { Input } from './input';
 import { imageNow, loadImage, preload } from './render/assets';
 import { buildVisual, type BuildingVisual } from './render/landmark';
@@ -24,6 +27,13 @@ let debugContact = new URLSearchParams(location.search).has('debugContact') || n
 addEventListener('keydown', (ev) => { if (ev.key === 'F3') { ev.preventDefault(); debugContact = !debugContact; } }); // dev overlay toggle
 
 const save = loadSave();
+// v5 story progress: its own key, never mixed with the endless records above
+const safeStorage = (() => { try { return window.localStorage; } catch { return null; } })();
+const story = new StoryStore(safeStorage);
+const params = new URLSearchParams(location.search);
+// development only: ?dev=1 opens every level (never in a production build)
+if (import.meta.env.DEV && params.has('dev')) story.progress.unlockedLevel = STORY_LEVELS;
+let pendingUnlockAnim: number | null = null;
 const audio = new AudioManager();
 audio.enabled = save.sound;
 const input = new Input();
@@ -53,7 +63,7 @@ let hintStep = 0, hintTimer = 0, hint3Shown = false, tutorialActive = !save.tuto
 // ---------------------------------------------------------------- HUD
 const HEART = (full: boolean) =>
   `<svg viewBox="0 0 30 28"><path d="M15 26 C5 18 1 13 1 8 A6.5 6.5 0 0 1 15 5 A6.5 6.5 0 0 1 29 8 C29 13 25 18 15 26Z" fill="${full ? '#ff4a5e' : 'rgba(255,255,255,.18)'}" stroke="#1b1530" stroke-width="2.5" stroke-linejoin="round"/>${full ? '<path d="M7 9 A3 3 0 0 1 11 6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".8"/>' : ''}</svg>`;
-const last = { lives: -1, score: -1, combo: -1, special: -1, bid: '', lang: '' };
+const last = { lives: -1, score: -1, combo: -1, special: -1, bid: '', lang: '', wave: -1 };
 const pad9 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(9, '0');
 
 function nextLandmarkName() {
@@ -93,7 +103,13 @@ function updateHud() {
   }
   const b = state.building;
   const bid = `${b?.id ?? ''}${b?.floors.length ?? 0}`;
-  if (bid !== last.bid || last.lang !== lang) {
+  const st = state.story;
+  if (st && (bid !== last.bid || last.lang !== lang || last.wave !== st.wavesCleared)) {
+    $('tier').textContent = `${t('level').toUpperCase()} ${st.level}/${STORY_LEVELS}`;
+    $('bname').textContent = `${st.wavesCleared} / ${st.waveCount} ${t('buildingsLbl')}`;
+    $('next-name').textContent = stageFor(st.level).title[lang];
+    last.bid = bid; last.lang = lang; last.wave = st.wavesCleared;
+  } else if (!st && (bid !== last.bid || last.lang !== lang)) {
     const tier = tierOf(state);
     $('tier').textContent = `TIER ${tier.tier} · ${tier.name}${b?.elite ? ' · ELITE' : ''}`;
     $('bname').textContent = b ? `${landmarkById(b.landmarkId).names[lang]} · ${b.floors.length}${lang === 'en' ? ' ' : ''}${t('floors')}` : '';
@@ -118,21 +134,50 @@ function showHint(text: string, ms: number) {
 
 // ---------------------------------------------------------------- flow
 function showOverlay(id: string | null) {
-  for (const o of ['ov-title', 'ov-help', 'ov-pause', 'ov-over']) $(o).classList.toggle('hidden', o !== id);
+  for (const o of ['ov-title', 'ov-help', 'ov-pause', 'ov-over', 'ov-map', 'ov-clear', 'ov-fail']) $(o).classList.toggle('hidden', o !== id);
   const playing = id === null;
   for (const o of ['hud', 'status']) $(o).classList.toggle('hidden', !playing && id !== 'ov-pause');
 }
 
-function toTitle() {
+/** v5: the world map is home. */
+function toMap() {
   state.phase = 'TITLE';
   state.building = null;
+  state.mode = 'endless'; state.story = null;
+  document.body.classList.remove('story');
   fx.clear();
-  $('title-best').textContent = String(save.bestScore);
-  $('title-combo').textContent = String(save.bestCombo);
-  showOverlay('ov-title');
+  worldMap.render(story.progress, pendingUnlockAnim);
+  pendingUnlockAnim = null;
+  showOverlay('ov-map');
+  worldMap.focusSelected();
+}
+
+let currentLevel = 1;
+/** Start (or retry) a story level — only through the unlock gate. */
+function playStory(level: number) {
+  if (!canEnterStoryLevel(level, story.progress)) { toMap(); return; }
+  currentLevel = level;
+  resetForRun();
+  startStoryRun(state, level, (Date.now() ^ (Math.random() * 1e9)) >>> 0);
+  document.body.classList.add('story');
+  bgLandmark = stageFor(level).landmarkPool[0];
+  showOverlay(null);
+  audio.play('start');
+}
+
+function resetForRun() {
+  audio.unlock();
+  input.clear();
+  fx.clear(); camera.clear(); banners.clear();
+  pendingBursts.length = 0;
+  last.lives = -1; last.score = -1; last.combo = -1; last.special = -1; last.bid = '';
+  hintStep = 0; hint3Shown = false; tutorialActive = !save.tutorialSeen;
+  $('hint').classList.add('hidden');
+  keyGuideMs = 4000; $('keyguide').classList.remove('faded');
 }
 
 function begin() {
+  document.body.classList.remove('story');
   audio.unlock();
   input.clear();
   fx.clear(); camera.clear(); banners.clear();
@@ -341,7 +386,37 @@ function onEvent(e: GameEvent) {
       if (tutorialActive && hintStep === 0) { hintStep = 1; showHint(t('hint1'), 1800); }
       break;
     }
+    case 'stageClear': {
+      const res = story.commitClear(e.attemptId, e.level, e.score, e.maxCombo, e.livesLeft);
+      if (!res) break; // already committed (a duplicate callback never unlocks twice)
+      pendingUnlockAnim = res.newlyUnlocked;
+      if (!save.tutorialSeen) { save.tutorialSeen = true; writeSave(save); }
+      audio.play('finish');
+      $('clear-title').textContent = `${t('level').toUpperCase()} ${String(e.level).padStart(2, '0')} ${t('stageClear')}`;
+      $('clear-stars').textContent = '★'.repeat(res.stars) + '☆'.repeat(3 - res.stars);
+      $('clear-score').textContent = e.score.toLocaleString();
+      $('clear-combo').textContent = `×${e.maxCombo}`;
+      $('clear-lives').textContent = '♥'.repeat(e.livesLeft);
+      $('clear-unlock').textContent = res.newlyUnlocked ? tf('unlockedNew', { n: res.newlyUnlocked }) : '';
+      $('clear-unlock').classList.toggle('hidden', !res.newlyUnlocked);
+      $('clear-world').classList.toggle('hidden', e.level !== STORY_LEVELS);
+      $('clear-save').classList.toggle('hidden', res.saved);
+      $('btn-next').classList.toggle('hidden', e.level >= STORY_LEVELS);
+      showOverlay('ov-clear');
+      (e.level >= STORY_LEVELS ? $('btn-clear-map') : $('btn-next')).focus();
+      break;
+    }
+    case 'stageFailed': {
+      audio.play('gameOver');
+      $('fail-title').textContent = `${t('level').toUpperCase()} ${String(e.level).padStart(2, '0')} ${t('stageFailed')}`;
+      $('fail-progress').textContent = tf('destroyedOf', { a: e.wavesCleared, n: e.waveCount });
+      $('fail-score').textContent = e.score.toLocaleString();
+      $('fail-combo').textContent = `×${e.maxCombo}`;
+      window.setTimeout(() => { if (state.phase === 'GAME_OVER') { showOverlay('ov-fail'); $('btn-fail-retry').focus(); } }, 600);
+      break;
+    }
     case 'gameOver': {
+      if (state.mode === 'story') break; // the story result screens handle it
       const record = recordRun(save, state.score, state.maxCombo);
       if (!save.tutorialSeen) { save.tutorialSeen = true; writeSave(save); }
       audio.play('gameOver');
@@ -409,8 +484,18 @@ function frame(now: number) {
     flash: effects.flash, redFlash: effects.red, cutin: effects.cutin, reducedMotion: reducedMotion || save.effectsLow,
     countdown: state.phase === 'COUNTDOWN' ? state.countdown : null,
     waveCard: state.phase === 'WAVE_TRANSITION' && b ? {
-      name: landmarkById(b.landmarkId).names[lang], elite: b.elite, k: 1 - state.phaseMs / (state.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs),
-      sub: `${landmarkById(b.landmarkId).names.en.toUpperCase()} · ${b.floors.length} ${t('floors')} · TIER ${b.tier}`,
+      name: landmarkById(b.landmarkId).names[lang], elite: b.elite,
+      eliteLabel: state.story ? t('finalBuilding') : 'ELITE',
+      k: 1 - state.phaseMs / (state.story && b.elite ? BALANCE.finalIntroMs : state.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs),
+      sub: state.story
+        ? `${t('level').toUpperCase()} ${state.story.level} · ${state.story.waveIndex + 1} / ${state.story.waveCount} · ${b.floors.length} ${t('floors')}`
+        : `${landmarkById(b.landmarkId).names.en.toUpperCase()} · ${b.floors.length} ${t('floors')} · TIER ${b.tier}`,
+    } : null,
+    story: storyStage(state) ? {
+      stage: storyStage(state)!, waveIndex: state.story!.waveIndex,
+      intro: state.phase === 'COUNTDOWN' ? 1 - state.phaseMs / BALANCE.stageIntroMs : null,
+      title: storyStage(state)!.title[lang], goal: tf('goalN', { n: state.story!.waveCount }), keys: state.story!.level === 1 ? t('level1Keys') : '',
+      levelLabel: t('level').toUpperCase(),
     } : null,
     showHp: save.showHpNumbers,
   };
@@ -439,8 +524,21 @@ function bind() {
   const click = (id: string, fn: () => void) => $(id).addEventListener('click', () => { audio.unlock(); fn(); });
   click('btn-start', begin);
   click('btn-restart', begin);
-  click('btn-home', toTitle);
-  click('btn-quit', toTitle);
+  click('btn-home', toMap);
+  click('btn-quit', () => { resume(state); toMap(); });
+  click('btn-pause-map', () => { resume(state); toMap(); });
+  click('btn-pause-retry', () => { resume(state); playStory(currentLevel); });
+  click('btn-next', () => { toMap(); });
+  click('btn-clear-retry', () => playStory(currentLevel));
+  click('btn-clear-map', toMap);
+  click('btn-fail-retry', () => playStory(currentLevel));
+  click('btn-fail-map', toMap);
+  click('btn-reset-story', () => {
+    if (!window.confirm(t('resetConfirm'))) return;
+    story.reset();
+    $('ov-help').classList.add('hidden');
+    toMap();
+  });
   click('btn-resume', doResume);
   click('btn-pause', doPause);
   click('btn-keys', doPause); // the full key list lives in the pause menu
@@ -468,15 +566,29 @@ function bind() {
   addEventListener('keydown', (e) => {
     if (e.code !== 'Enter' || !$('ov-help').classList.contains('hidden')) return;
     if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLSelectElement) return; // let the focused control act
-    const onTitle = state.phase === 'TITLE' && !$('ov-title').classList.contains('hidden');
     const onOver = state.phase === 'GAME_OVER' && !$('ov-over').classList.contains('hidden');
-    if (onTitle || onOver) begin();
+    if (onOver) begin();
   });
+  // the level intro can always be skipped
+  const skip = () => { if (state.phase === 'COUNTDOWN' && state.mode === 'story') skipIntro(state); };
+  addEventListener('keydown', (e) => { if (!e.repeat && $('ov-map').classList.contains('hidden')) skip(); });
+  $('view').addEventListener('pointerdown', skip);
   addEventListener('resize', layout);
   addEventListener('orientationchange', () => setTimeout(layout, 150));
   document.addEventListener('visibilitychange', () => { if (document.hidden) { if (state.phase !== 'PAUSED') doPause(); audio.suspend(); } else audio.resume(); });
   addEventListener('blur', () => { if (state.phase !== 'PAUSED') doPause(); });
 }
+
+const worldMap = new WorldMap($('ov-map'), {
+  onPlay: (level) => playStory(level),
+  onEndless: () => begin(),
+  onSettings: () => {
+    $<HTMLInputElement>('opt-tutorial').checked = !save.tutorialSeen;
+    $<HTMLInputElement>('opt-hp').checked = save.showHpNumbers;
+    $<HTMLInputElement>('opt-fx').checked = save.effectsLow;
+    $('ov-help').classList.remove('hidden');
+  },
+});
 
 async function boot() {
   bind();
@@ -484,13 +596,17 @@ async function boot() {
   if (debugFeel) debugTick = mountDebugPanel({ state, eventLog, camera, fx, startTest: () => { if (state.phase === 'TITLE' || state.phase === 'GAME_OVER') begin(); } });
   syncSound();
   layout();
-  // the title shows at once; images stream in, and any that fail are drawn with fallback shapes
-  toTitle();
+  // the world map shows at once; images stream in, and any that fail are drawn with fallback shapes
+  toMap();
+  if (story.corrupted) worldMap.setNote(t('saveCorrupt'));
+  // ?level=N goes straight into a level — but only one that is unlocked
+  const want = Number(params.get('level'));
+  if (params.has('level') && canEnterStoryLevel(want, story.progress)) playStory(want);
   requestAnimationFrame((n) => { lastFrame = n; frame(n); });
-  const srcs = [...new Set(LANDMARKS.flatMap((l) => [l.asset, l.background])), 'assets/fx/special_cutin.webp', ...Object.values(NINJA_SPRITES)];
+  const srcs = [...new Set([...LANDMARKS.flatMap((l) => [l.asset, l.background]), ...STORY_STAGES.map((st) => st.plate)]), 'assets/fx/special_cutin.webp', ...Object.values(NINJA_SPRITES)];
   await preload(srcs);
   if (!imageNow(LANDMARKS[0].background)) console.warn('background art missing: using drawn fallbacks');
 }
 
 void boot();
-(window as unknown as { __wb?: unknown }).__wb = { state, renderer, save }; // QA hook for automated playtests
+(window as unknown as { __wb?: unknown }).__wb = { state, renderer, save, story, playStory, toMap }; // QA hook for automated playtests

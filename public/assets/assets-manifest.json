@@ -476,6 +476,48 @@
       "source": "art-source/building/basic_shop.jpg",
       "bytes": 199203,
       "success": true
+    },
+    "building:basic_house": {
+      "id": "basic_house",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable three-storey town house in a generic friendly town: a narrow three-storey town house with a pitched tiled roof, a chimney, small balconies and flower boxes, warm pastel facade. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "2:3",
+      "resolution": "1k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:36:08.104Z",
+      "source": "art-source/building/basic_house.jpg",
+      "bytes": 296433,
+      "success": true
+    },
+    "building:basic_office": {
+      "id": "basic_office",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable low modern office block in a generic city: a simple five-storey office block with even rows of blue glass windows, concrete frame, flat roof with a small rooftop unit. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "2:3",
+      "resolution": "1k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:38:19.747Z",
+      "source": "art-source/building/basic_office.jpg",
+      "bytes": 241714,
+      "success": true
+    },
+    "building:basic_apartment": {
+      "id": "basic_apartment",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable mid-rise apartment block in a generic city: a seven-storey apartment block with repeating balconies, small plants, air-conditioner boxes, flat roof with a water tank. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "1:2",
+      "resolution": "1k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:40:12.679Z",
+      "source": "art-source/building/basic_apartment.jpg",
+      "bytes": 325857,
+      "success": true
     }
   },
   "note": "art-source files were re-encoded to WebP (buildings/characters lossless) after download to keep the repo small"

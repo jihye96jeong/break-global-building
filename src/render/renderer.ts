@@ -2,6 +2,7 @@
 import { BALANCE, DANGER_Y, GROUND_Y, WORLD_H } from '../config/balance';
 import { GUARD_FEEL, JUMP_FEEL, SPECIAL_SEQ } from '../config/gameFeel';
 import { landmarkById } from '../config/landmarks';
+import type { StoryStage } from '../story/stages';
 import { attackSurfaceY, guardPlaneY, headY, heroLanePos, motionOwner, type RunState } from '../core/game';
 import type { Banners, Camera } from './camera';
 import { imageNow } from './assets';
@@ -23,7 +24,9 @@ export interface FrameFx {
   flash: number; // 0..1 white flash
   redFlash: number; // 0..1 hurt tint
   cutin: number; // 0..1 special cut-in strength
-  waveCard: { name: string; sub: string; elite: boolean; k: number } | null;
+  waveCard: { name: string; sub: string; elite: boolean; eliteLabel?: string; k: number } | null;
+  /** v5 story mode: the level's time of day, and its intro card while it shows */
+  story: { stage: StoryStage; waveIndex: number; intro: number | null; title: string; goal: string; keys: string; levelLabel: string } | null;
   countdown: number | null;
   showHp: boolean;
   reducedMotion: boolean;
@@ -67,7 +70,8 @@ export class Renderer {
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.save();
     g.translate(f.camera.x, f.camera.y + f.panY); // world layer only: hero and building shake (and pan) together, HUD stays put
-    this.drawBackground(bgLandmarkId);
+    if (f.story) this.drawStorySky(f.story.stage, f.story.waveIndex, s, time);
+    else this.drawBackground(bgLandmarkId);
 
     const b = s.building;
     if (visual) this.laneGap += (visual.width / 3 - this.laneGap) * 0.2;
@@ -116,6 +120,7 @@ export class Renderer {
     if (f.redFlash > 0) { g.fillStyle = `rgba(220,30,40,${0.35 * f.redFlash})`; g.fillRect(0, 0, this.worldW, WORLD_H); }
     if (f.countdown) this.bigText(String(f.countdown), WORLD_H * 0.42, 120, '#ffe066');
     if (f.waveCard) this.drawWaveCard(f.waveCard);
+    if (f.story && f.story.intro !== null) this.drawStageIntro(f.story);
     // banners sit just under the HUD so they never cover the weak spots
     // when a high building's underside (and the hero stuck to it) is up there, banners go below them instead
     const hb = s.building;
@@ -257,6 +262,80 @@ export class Renderer {
     g.restore();
   }
 
+  /**
+   * v5 §7: the level's time of day — palette gradient, sun or moon, the time-of-day plate, stars, and a near city
+   * silhouette whose windows light up as night falls. Slight parallax with the hero; render only (no hitboxes).
+   */
+  private drawStorySky(st: StoryStage, waveIndex: number, s: RunState, time: number) {
+    const g = this.g;
+    const W = this.worldW;
+    const px = (heroLanePos(s.player) - 1); // −1..1 for parallax
+    const grd = g.createLinearGradient(0, 0, 0, GROUND_Y);
+    grd.addColorStop(0, st.palette.skyTop); grd.addColorStop(1, st.palette.skyBottom);
+    g.fillStyle = grd; g.fillRect(-20, -1200, W + 40, WORLD_H + 1240);
+    const img = imageNow(st.plate);
+    if (img) {
+      const h = Math.max(GROUND_Y + 40, (W + 60) * (img.naturalHeight / img.naturalWidth));
+      const w = h * (img.naturalWidth / img.naturalHeight);
+      g.save(); g.globalAlpha = st.plateAlpha;
+      g.drawImage(img, (W - w) / 2 - px * 8, GROUND_Y + 40 - h, w, h);
+      g.restore();
+    }
+    if (st.sun) {
+      const sy = 90 + (st.level - 1) * 55;
+      const sg = g.createRadialGradient(W * 0.8, sy, 0, W * 0.8, sy, 90);
+      sg.addColorStop(0, 'rgba(255,250,215,.95)'); sg.addColorStop(0.35, 'rgba(255,240,180,.45)'); sg.addColorStop(1, 'rgba(255,240,180,0)');
+      g.fillStyle = sg; g.fillRect(W * 0.8 - 90, sy - 90, 180, 180);
+    }
+    if (st.stars > 0) {
+      let seed = 11;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      for (let i = 0; i < 90 * st.stars; i++) {
+        const x = rnd() * W, y = rnd() * GROUND_Y * 0.6, tw = 0.55 + 0.45 * Math.sin(time * 0.002 + i);
+        g.fillStyle = `rgba(255,255,255,${(0.35 + 0.5 * rnd()) * tw})`;
+        g.fillRect(x - px * 3, y, 1.6, 1.6);
+      }
+    }
+    if (st.moon) {
+      g.fillStyle = '#f4f1dc'; g.beginPath(); g.arc(W * 0.16, 80, 24, 0, Math.PI * 2); g.fill();
+      g.fillStyle = st.palette.skyTop; g.beginPath(); g.arc(W * 0.16 + 10, 74, 21, 0, Math.PI * 2); g.fill();
+    }
+    // near skyline with lit windows (from twilight on); a touch darker with every wave of the level
+    if (st.windowLights > 0) {
+      let seed = 3 + st.level;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      let x = -30 - px * 14;
+      while (x < W + 30) {
+        const w = 26 + rnd() * 40, h = 40 + rnd() * 90;
+        g.fillStyle = 'rgba(12,14,36,.82)'; g.fillRect(x, GROUND_Y - h, w, h);
+        for (let wy = GROUND_Y - h + 8; wy < GROUND_Y - 6; wy += 11) for (let wx = x + 5; wx < x + w - 5; wx += 9) if (rnd() < st.windowLights * 0.55) { g.fillStyle = 'rgba(255,214,120,.85)'; g.fillRect(wx, wy, 4, 5); }
+        x += w + 3;
+      }
+    }
+    const dim = waveIndex / Math.max(1, st.waveCount) * 0.05;
+    if (dim > 0) { g.fillStyle = `rgba(5,8,30,${dim})`; g.fillRect(-20, -1200, W + 40, GROUND_Y + 1200); }
+    const ground = g.createLinearGradient(0, GROUND_Y, 0, WORLD_H);
+    const night = st.level >= 6;
+    ground.addColorStop(0, night ? '#5c5a78' : '#d9cdb5'); ground.addColorStop(0.25, night ? '#3d3a58' : '#9b8b78'); ground.addColorStop(1, '#22203a');
+    g.fillStyle = ground; g.fillRect(-20, GROUND_Y, W + 40, WORLD_H - GROUND_Y + 20);
+    g.fillStyle = '#1b1530'; g.fillRect(-20, GROUND_Y - 1.5, W + 40, 3);
+  }
+
+  /** v5 §8.1: LEVEL 05 / 10, the title, the goal, READY → BREAK IT! (skippable). */
+  private drawStageIntro(i: { stage: StoryStage; intro: number | null; title: string; goal: string; keys: string; levelLabel: string }) {
+    const g = this.g, k = i.intro ?? 1;
+    const a = k < 0.12 ? k / 0.12 : k > 0.88 ? (1 - k) / 0.12 : 1;
+    g.save(); g.globalAlpha = Math.max(0, a);
+    g.fillStyle = 'rgba(16,12,36,.62)'; g.fillRect(0, WORLD_H * 0.24, this.worldW, i.keys ? 210 : 180);
+    const y0 = WORLD_H * 0.24;
+    this.bigText(`${i.levelLabel} ${String(i.stage.level).padStart(2, '0')} / 10`, y0 + 30, 22, '#ffe066');
+    this.bigText(i.title, y0 + 74, 38, '#ffffff');
+    this.bigText(i.goal, y0 + 114, 18, '#d8d2ff');
+    this.bigText(k < 0.6 ? 'READY' : 'BREAK IT!', y0 + 152, 26, k < 0.6 ? '#8ff0ff' : '#ffcc33');
+    if (i.keys) this.bigText(i.keys, y0 + 190, 14, '#ffffff');
+    g.restore();
+  }
+
   private drawBackground(landmarkId: string) {
     const g = this.g;
     const l = landmarkById(landmarkId);
@@ -353,7 +432,7 @@ export class Renderer {
     this.bigText('FULL BREAK!', y + bandH / 2, 72, '#fff3b0', -0.08);
   }
 
-  private drawWaveCard(c: { name: string; sub: string; elite: boolean; k: number }) {
+  private drawWaveCard(c: { name: string; sub: string; elite: boolean; eliteLabel?: string; k: number }) {
     const g = this.g;
     const a = c.k < 0.2 ? c.k / 0.2 : c.k > 0.8 ? (1 - c.k) / 0.2 : 1;
     g.save();
@@ -362,7 +441,7 @@ export class Renderer {
     g.fillRect(0, WORLD_H * 0.36, this.worldW, 96);
     g.restore();
     g.save(); g.globalAlpha = a;
-    if (c.elite) this.bigText('ELITE', WORLD_H * 0.36 + 18, 20, '#ffcc33');
+    if (c.elite) this.bigText(c.eliteLabel ?? 'ELITE', WORLD_H * 0.36 + 18, 20, '#ffcc33');
     this.bigText(c.name, WORLD_H * 0.36 + 52, 40, '#ffffff');
     this.bigText(c.sub, WORLD_H * 0.36 + 82, 15, '#d8d2ff');
     g.restore();

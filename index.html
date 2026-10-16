@@ -37,6 +37,42 @@
       </footer>
 
       <!-- every app state lives on this one page -->
+      <!-- v5: the world map is the first screen -->
+      <section id="ov-map" class="overlay map hidden" aria-label="World map"></section>
+
+      <section id="ov-clear" class="overlay hidden">
+        <div class="panel center result">
+          <h2 id="clear-title"></h2>
+          <p id="clear-stars" class="stars-big"></p>
+          <dl class="tally">
+            <dt data-i18n="score"></dt><dd id="clear-score">0</dd>
+            <dt data-i18n="maxCombo"></dt><dd id="clear-combo">0</dd>
+            <dt data-i18n="livesLeft"></dt><dd id="clear-lives"></dd>
+          </dl>
+          <p id="clear-unlock" class="unlock hidden"></p>
+          <p id="clear-world" class="world-complete hidden"><b data-i18n="worldComplete"></b><br><span data-i18n="worldCompleteSub"></span></p>
+          <p id="clear-save" class="save-warn hidden" data-i18n="saveFailed"></p>
+          <button id="btn-next" class="big-btn" data-i18n="nextLevel"></button>
+          <div class="row">
+            <button id="btn-clear-retry" class="small-btn" data-i18n="retry"></button>
+            <button id="btn-clear-map" class="small-btn" data-i18n="worldMapBtn"></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="ov-fail" class="overlay hidden">
+        <div class="panel center result">
+          <h2 id="fail-title"></h2>
+          <p id="fail-progress" class="fail-progress"></p>
+          <dl class="tally">
+            <dt data-i18n="score"></dt><dd id="fail-score">0</dd>
+            <dt data-i18n="maxCombo"></dt><dd id="fail-combo">0</dd>
+          </dl>
+          <button id="btn-fail-retry" class="big-btn" data-i18n="retry"></button>
+          <button id="btn-fail-map" class="small-btn" data-i18n="worldMapBtn"></button>
+        </div>
+      </section>
+
       <section id="ov-title" class="overlay">
         <div class="title-card">
           <h1 class="logo"><span>WORLD</span><span>BREAKER</span></h1>
@@ -72,6 +108,7 @@
           <label class="check"><input type="checkbox" id="opt-tutorial" /> <span data-i18n="showTutorial"></span></label>
           <label class="check"><input type="checkbox" id="opt-hp" /> <span data-i18n="showHp"></span></label>
           <label class="check"><input type="checkbox" id="opt-fx" /> <span data-i18n="effectsLow"></span></label>
+          <button id="btn-reset-story" class="small-btn danger" data-i18n="resetProgress"></button>
           <button class="big-btn" data-close="ov-help" data-i18n="ok"></button>
         </div>
       </section>
@@ -85,6 +122,10 @@
             <button id="btn-pause-sound" class="small-btn sound-toggle"></button>
             <label class="lang"><span class="sr" data-i18n="language"></span><select class="lang-select small-btn"></select></label>
             <button id="btn-quit" class="small-btn" data-i18n="quit"></button>
+          </div>
+          <div class="row story-only">
+            <button id="btn-pause-retry" class="small-btn" data-i18n="retry"></button>
+            <button id="btn-pause-map" class="small-btn" data-i18n="worldMapBtn"></button>
           </div>
         </div>
       </section>
