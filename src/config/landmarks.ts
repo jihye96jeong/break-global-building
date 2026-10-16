@@ -18,8 +18,6 @@ export interface Landmark {
   debrisPalette: string[];
   /** what the building is made of: drives chip shapes and impact sounds (v2 §7.2) */
   material: Material;
-  /** v5: a simple fictional starter building for the story mode's first levels (never in the endless rotation) */
-  basic?: boolean;
   /** procedural fallback silhouette when the art cannot be loaded */
   fallback: { shape: 'tower' | 'stepped' | 'wide' | 'twin' | 'lattice' | 'shells' | 'arches' | 'domes'; color: string; accent: string };
 }
@@ -81,31 +79,57 @@ export const LANDMARKS: Landmark[] = [
     asset: art('leaning_tower_pisa'), background: sky('day'), sky: 'day', displayHeight: 340,
     segments: [{ key: 'base', heightRatio: 0.2 }, { key: 'galleries', heightRatio: 0.65 }, { key: 'belfry', heightRatio: 0.15 }],
     debrisPalette: ['#f3efe6', '#d9d2c3', '#b8ad97', '#7d7462'], material: 'stone', fallback: { shape: 'tower', color: '#ece6d8', accent: '#b8ad97' } },
-  // v5 story-mode starter buildings (fictional, generated at development time)
-  { id: 'basic_shop', basic: true, names: { ko: '골목 상가', en: 'Corner Shop', ja: '角のお店', zh: '街角小店' },
-    asset: art('basic_shop'), background: sky('day'), sky: 'day', displayHeight: 150,
-    segments: [{ key: 'shopfront', heightRatio: 0.45 }, { key: 'upper', heightRatio: 0.4 }, { key: 'roof', heightRatio: 0.15 }],
-    debrisPalette: ['#f6d7b0', '#e98f6f', '#9fd3e6', '#6b5a4c'], material: 'mixed', fallback: { shape: 'wide', color: '#f6d7b0', accent: '#e98f6f' } },
-  { id: 'basic_house', basic: true, names: { ko: '3층 주택', en: 'Town House', ja: '三階建ての家', zh: '三层小楼' },
-    asset: art('basic_house'), background: sky('day'), sky: 'day', displayHeight: 200,
-    segments: [{ key: 'ground', heightRatio: 0.3 }, { key: 'floors', heightRatio: 0.45 }, { key: 'roof', heightRatio: 0.25 }],
-    debrisPalette: ['#f3e3c9', '#c9774f', '#8a5a3c', '#5b4636'], material: 'wood', fallback: { shape: 'stepped', color: '#f3e3c9', accent: '#c9774f' } },
-  { id: 'basic_office', basic: true, names: { ko: '낮은 오피스', en: 'Office Block', ja: 'オフィスビル', zh: '办公楼' },
-    asset: art('basic_office'), background: sky('day'), sky: 'day', displayHeight: 230,
-    segments: [{ key: 'lobby', heightRatio: 0.2 }, { key: 'offices', heightRatio: 0.7 }, { key: 'roof', heightRatio: 0.1 }],
-    debrisPalette: ['#cfd8e3', '#8fb7d9', '#5b7a99', '#3b4a5c'], material: 'glass', fallback: { shape: 'tower', color: '#cfd8e3', accent: '#8fb7d9' } },
-  { id: 'basic_apartment', basic: true, names: { ko: '저층 아파트', en: 'Apartment Block', ja: 'マンション', zh: '公寓楼' },
-    asset: art('basic_apartment'), background: sky('day'), sky: 'day', displayHeight: 280,
-    segments: [{ key: 'entrance', heightRatio: 0.15 }, { key: 'balconies', heightRatio: 0.75 }, { key: 'roof', heightRatio: 0.1 }],
-    debrisPalette: ['#efe6d8', '#c8b9a3', '#8d9db0', '#5d5a57'], material: 'stone', fallback: { shape: 'tower', color: '#efe6d8', accent: '#8d9db0' } },
-  { id: 'basic_clocktower', basic: true, names: { ko: '시계탑', en: 'Clock Tower', ja: '時計塔', zh: '钟楼' },
-    asset: art('basic_clocktower'), background: sky('day'), sky: 'day', displayHeight: 300,
-    segments: [{ key: 'base', heightRatio: 0.35 }, { key: 'shaft', heightRatio: 0.35 }, { key: 'clock', heightRatio: 0.15 }, { key: 'roof', heightRatio: 0.15 }],
-    debrisPalette: ['#c8664a', '#9b4a36', '#e9d8b8', '#4f8a7a'], material: 'stone', fallback: { shape: 'tower', color: '#c8664a', accent: '#4f8a7a' } },
+  // more real landmarks (generated at development time); the small ones open the story mode
+  { id: 'cheomseongdae', names: { ko: '첨성대', en: 'Cheomseongdae', ja: '瞻星台', zh: '瞻星台' },
+    asset: art('cheomseongdae'), background: sky('day'), sky: 'day', displayHeight: 170,
+    segments: [{ key: 'base', heightRatio: 0.15 }, { key: 'courses', heightRatio: 0.7 }, { key: 'top', heightRatio: 0.15 }],
+    debrisPalette: ['#d8ccb4', '#b9aa8c', '#8f8268', '#5e5545'], material: 'stone', fallback: { shape: 'tower', color: '#d8ccb4', accent: '#8f8268' } },
+  { id: 'sungnyemun', names: { ko: '숭례문', en: 'Sungnyemun Gate', ja: '崇礼門', zh: '崇礼门' },
+    asset: art('sungnyemun'), background: sky('day'), sky: 'day', displayHeight: 180,
+    segments: [{ key: 'stone_gate', heightRatio: 0.45 }, { key: 'pavilion', heightRatio: 0.3 }, { key: 'roof', heightRatio: 0.25 }],
+    debrisPalette: ['#cfc6b4', '#8a6a4c', '#3f6b5c', '#c0392b'], material: 'mixed', fallback: { shape: 'wide', color: '#cfc6b4', accent: '#3f6b5c' } },
+  { id: 'brandenburg_gate', names: { ko: '브란덴부르크 문', en: 'Brandenburg Gate', ja: 'ブランデンブルク門', zh: '勃兰登堡门' },
+    asset: art('brandenburg_gate'), background: sky('day'), sky: 'day', displayHeight: 170,
+    segments: [{ key: 'columns', heightRatio: 0.6 }, { key: 'entablature', heightRatio: 0.2 }, { key: 'quadriga', heightRatio: 0.2 }],
+    debrisPalette: ['#e8dcc0', '#cdbd98', '#4f8a7a', '#8a7a5c'], material: 'stone', fallback: { shape: 'arches', color: '#e8dcc0', accent: '#4f8a7a' } },
+  { id: 'arc_de_triomphe', names: { ko: '개선문', en: 'Arc de Triomphe', ja: '凱旋門', zh: '凯旋门' },
+    asset: art('arc_de_triomphe'), background: sky('day'), sky: 'day', displayHeight: 200,
+    segments: [{ key: 'pillars', heightRatio: 0.6 }, { key: 'frieze', heightRatio: 0.2 }, { key: 'attic', heightRatio: 0.2 }],
+    debrisPalette: ['#efe6d2', '#d6c9ab', '#a99a7a', '#6e6450'], material: 'stone', fallback: { shape: 'arches', color: '#efe6d2', accent: '#a99a7a' } },
+  { id: 'kinkakuji', names: { ko: '금각사', en: 'Kinkaku-ji', ja: '金閣寺', zh: '金阁寺' },
+    asset: art('kinkakuji'), background: sky('day'), sky: 'day', displayHeight: 200,
+    segments: [{ key: 'ground_floor', heightRatio: 0.35 }, { key: 'second', heightRatio: 0.3 }, { key: 'top', heightRatio: 0.35 }],
+    debrisPalette: ['#f2c94c', '#d4a72c', '#5b3a29', '#2f2a26'], material: 'wood', fallback: { shape: 'stepped', color: '#f2c94c', accent: '#5b3a29' } },
+  { id: 'himeji_castle', names: { ko: '히메지성', en: 'Himeji Castle', ja: '姫路城', zh: '姬路城' },
+    asset: art('himeji_castle'), background: sky('day'), sky: 'day', displayHeight: 240,
+    segments: [{ key: 'stone_base', heightRatio: 0.3 }, { key: 'keep', heightRatio: 0.5 }, { key: 'roof', heightRatio: 0.2 }],
+    debrisPalette: ['#f4f4f0', '#9aa3ad', '#6b6f75', '#8a7f70'], material: 'mixed', fallback: { shape: 'stepped', color: '#f4f4f0', accent: '#6b6f75' } },
+  { id: 'st_basils', names: { ko: '성 바실리 대성당', en: "Saint Basil's Cathedral", ja: '聖ワシリイ大聖堂', zh: '圣瓦西里大教堂' },
+    asset: art('st_basils'), background: sky('sunset'), sky: 'sunset', displayHeight: 280,
+    segments: [{ key: 'walls', heightRatio: 0.35 }, { key: 'drums', heightRatio: 0.3 }, { key: 'domes', heightRatio: 0.35 }],
+    debrisPalette: ['#b5442f', '#e8c46a', '#3f8f5a', '#2f5fa8'], material: 'mixed', fallback: { shape: 'domes', color: '#b5442f', accent: '#e8c46a' } },
+  { id: 'statue_of_liberty', names: { ko: '자유의 여신상', en: 'Statue of Liberty', ja: '自由の女神像', zh: '自由女神像' },
+    asset: art('statue_of_liberty'), background: sky('sunset'), sky: 'sunset', displayHeight: 320,
+    segments: [{ key: 'pedestal', heightRatio: 0.45 }, { key: 'robe', heightRatio: 0.35 }, { key: 'torch', heightRatio: 0.2 }],
+    debrisPalette: ['#6fb3a0', '#4f8f7e', '#c9bfa8', '#8a8070'], material: 'mixed', fallback: { shape: 'tower', color: '#6fb3a0', accent: '#c9bfa8' } },
+  { id: 'sagrada_familia', names: { ko: '사그라다 파밀리아', en: 'Sagrada Familia', ja: 'サグラダ・ファミリア', zh: '圣家堂' },
+    asset: art('sagrada_familia'), background: sky('sunset'), sky: 'sunset', displayHeight: 320,
+    segments: [{ key: 'facade', heightRatio: 0.4 }, { key: 'towers', heightRatio: 0.45 }, { key: 'pinnacles', heightRatio: 0.15 }],
+    debrisPalette: ['#d9b98c', '#b8956a', '#e07a5f', '#5e8c61'], material: 'stone', fallback: { shape: 'lattice', color: '#d9b98c', accent: '#b8956a' } },
+  { id: 'space_needle', names: { ko: '스페이스 니들', en: 'Space Needle', ja: 'スペース・ニードル', zh: '太空针塔' },
+    asset: art('space_needle'), background: sky('night'), sky: 'night', displayHeight: 330,
+    segments: [{ key: 'legs', heightRatio: 0.6 }, { key: 'saucer', heightRatio: 0.2 }, { key: 'spire', heightRatio: 0.2 }],
+    debrisPalette: ['#f2f2f2', '#c7ccd3', '#e08a3c', '#5a6370'], material: 'steel', fallback: { shape: 'tower', color: '#f2f2f2', accent: '#e08a3c' } },
+  { id: 'n_seoul_tower', names: { ko: 'N서울타워', en: 'N Seoul Tower', ja: 'Nソウルタワー', zh: 'N首尔塔' },
+    asset: art('n_seoul_tower'), background: sky('night'), sky: 'night', displayHeight: 330,
+    segments: [{ key: 'base', heightRatio: 0.15 }, { key: 'shaft', heightRatio: 0.45 }, { key: 'pod', heightRatio: 0.15 }, { key: 'antenna', heightRatio: 0.25 }],
+    debrisPalette: ['#f4f4f4', '#cfd6de', '#7b8794', '#e05a5a'], material: 'steel', fallback: { shape: 'tower', color: '#f4f4f4', accent: '#7b8794' } },
+  { id: 'cn_tower', names: { ko: 'CN 타워', en: 'CN Tower', ja: 'CNタワー', zh: '加拿大国家电视塔' },
+    asset: art('cn_tower'), background: sky('night'), sky: 'night', displayHeight: 340,
+    segments: [{ key: 'base', heightRatio: 0.15 }, { key: 'shaft', heightRatio: 0.45 }, { key: 'pod', heightRatio: 0.12 }, { key: 'antenna', heightRatio: 0.28 }],
+    debrisPalette: ['#d9d4cc', '#b3aca0', '#6f6a62', '#3c3a36'], material: 'stone', fallback: { shape: 'tower', color: '#d9d4cc', accent: '#6f6a62' } },
 ];
 
-/** Endless mode rotates through the real landmarks only. */
-export const ENDLESS_LANDMARKS = () => LANDMARKS.filter((l) => !l.basic);
 
 export const landmarkById = (id: string) => LANDMARKS.find((l) => l.id === id)!;
 export const REQUIRED_LANDMARKS = ['gyeongbokgung', 'lotte_world_tower', 'burj_khalifa'];

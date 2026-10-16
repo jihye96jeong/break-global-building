@@ -49,7 +49,7 @@ export function buildingRng(runSeed: number, buildingIndex: number): Rng {
 }
 
 export function pickLandmark(rng: Rng, recent: string[]): Landmark {
-  const pool = LANDMARKS.filter((l) => !l.basic && !recent.slice(-2).includes(l.id));
+  const pool = LANDMARKS.filter((l) => !recent.slice(-2).includes(l.id));
   return pool[Math.floor(rng.next() * pool.length)];
 }
 
@@ -108,8 +108,10 @@ export function layoutFloors(landmark: Landmark, count: number) {
       v += frac;
     }
   });
-  // segments skipped because there were fewer floors than segments: stretch the last floor to the top
-  if (out.length) out[out.length - 1].v1 = 1;
+  // segments skipped because there were fewer floors than segments: the next floor takes over their part of the art
+  // (no gaps), and the last floor reaches the top
+  for (let i = 1; i < out.length; i++) out[i].v0 = out[i - 1].v1;
+  if (out.length) { out[0].v0 = 0; out[out.length - 1].v1 = 1; }
   const sum = out.reduce((a, f) => a + f.height, 0);
   for (const f of out) f.height *= total / sum;
   // no floor thinner than the minimum: lift small ones, take the difference from the tall ones

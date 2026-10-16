@@ -92,18 +92,32 @@ export const EXTRA_LANDMARKS = {
   },
 };
 
-// v5 story mode: simple fictional starter buildings for levels 1–4 (no real landmark, no signage).
-export const BASIC_BUILDINGS = {
-  basic_shop: { name: 'small two-storey corner shop', city: 'a generic friendly town', aspect: '1:1',
-    detail: 'a cute small two-storey shop building with a striped awning, big ground-floor shop window, flat roof, pastel walls, no letters or signs' },
-  basic_house: { name: 'three-storey town house', city: 'a generic friendly town', aspect: '2:3',
-    detail: 'a narrow three-storey town house with a pitched tiled roof, a chimney, small balconies and flower boxes, warm pastel facade' },
-  basic_office: { name: 'low modern office block', city: 'a generic city', aspect: '2:3',
-    detail: 'a simple five-storey office block with even rows of blue glass windows, concrete frame, flat roof with a small rooftop unit' },
-  basic_apartment: { name: 'mid-rise apartment block', city: 'a generic city', aspect: '1:2',
-    detail: 'a seven-storey apartment block with repeating balconies, small plants, air-conditioner boxes, flat roof with a water tank' },
-  basic_clocktower: { name: 'town clock tower', city: 'a generic old town', aspect: '1:2',
-    detail: 'a slender brick town clock tower with a big round clock face near the top (no numbers), a small arched belfry and a pointed copper roof' },
+// More real landmarks (story levels use only real landmarks; small ones for the first levels).
+export const MORE_LANDMARKS = {
+  cheomseongdae: { name: 'Cheomseongdae observatory', city: 'Gyeongju, South Korea', aspect: '2:3',
+    detail: 'small ancient granite bottle-shaped stone observatory tower built from stacked rounded stone courses on a square base, a small square window halfway up and a square two-tier stone frame on top' },
+  sungnyemun: { name: 'Sungnyemun gate (Namdaemun)', city: 'Seoul, South Korea', aspect: '4:3',
+    detail: 'traditional Korean fortress gate: a massive granite stone base with one arched tunnel, topped by a two-storey wooden pavilion with sweeping curved grey tiled roofs and colourful dancheong eaves' },
+  brandenburg_gate: { name: 'Brandenburg Gate', city: 'Berlin, Germany', aspect: '4:3',
+    detail: 'neoclassical sandstone gate with twelve Doric columns forming five passages, a wide entablature and the green copper Quadriga chariot statue on top' },
+  arc_de_triomphe: { name: 'Arc de Triomphe', city: 'Paris, France', aspect: '1:1',
+    detail: 'massive pale stone triumphal arch with one huge central archway, relief sculptures on the pillars and a flat attic top' },
+  kinkakuji: { name: 'Kinkaku-ji Golden Pavilion', city: 'Kyoto, Japan', aspect: '1:1',
+    detail: 'three-storey Japanese temple pavilion covered in gold leaf, dark wooden first floor, layered thin shingled roofs and a golden phoenix on the very top' },
+  himeji_castle: { name: 'Himeji Castle', city: 'Himeji, Japan', aspect: '1:1',
+    detail: 'white Japanese castle keep with several stacked white plaster storeys, grey curved gabled roofs and a tall sloping stone base' },
+  st_basils: { name: "Saint Basil's Cathedral", city: 'Moscow, Russia', aspect: '2:3',
+    detail: 'red brick cathedral with a cluster of colourful striped and spiralled onion domes of different heights, a central tall tent-roof spire' },
+  statue_of_liberty: { name: 'Statue of Liberty', city: 'New York, USA', aspect: '1:2',
+    detail: 'green copper statue of a robed figure holding a torch high and a tablet, spiked crown, standing on a tall granite star-fort pedestal' },
+  sagrada_familia: { name: 'Sagrada Familia basilica', city: 'Barcelona, Spain', aspect: '2:3',
+    detail: 'ornate sandstone basilica with several tall perforated spindle-shaped spires topped with colourful mosaic pinnacles, richly carved facade' },
+  space_needle: { name: 'Space Needle', city: 'Seattle, USA', aspect: '1:2',
+    detail: 'slender white futuristic observation tower with three curved legs pinched at the waist and a wide flying-saucer-shaped top deck with a thin spire' },
+  n_seoul_tower: { name: 'N Seoul Tower', city: 'Seoul, South Korea', aspect: '1:2',
+    detail: 'tall slim white communication tower with a round observation deck pod near the top and a long antenna, standing on a small base building' },
+  cn_tower: { name: 'CN Tower', city: 'Toronto, Canada', aspect: '1:2',
+    detail: 'extremely tall slender concrete communication tower with a Y-shaped base, a large doughnut-shaped observation pod high up, a smaller sky pod above and a long thin antenna' },
 };
 
 // Generic skies for the endless mode, chosen per landmark (day / sunset / night).
@@ -118,7 +132,7 @@ export const SKIES = {
 };
 
 export function buildingPrompt(id) {
-  const l = LANDMARKS[id] ?? EXTRA_LANDMARKS[id] ?? BASIC_BUILDINGS[id];
+  const l = LANDMARKS[id] ?? EXTRA_LANDMARKS[id] ?? MORE_LANDMARKS[id];
   return `${STYLE_ANCHOR}\nA SINGLE iconic, instantly recognizable ${l.name} in ${l.city}: ${l.detail}. ` +
     'Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, ' +
     'all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. ' +
@@ -185,8 +199,8 @@ export function allJobs() {
   for (const id of Object.keys(EXTRA_LANDMARKS)) {
     jobs.push({ id, type: 'building', prompt: buildingPrompt(id), aspect: EXTRA_LANDMARKS[id].aspect, resolution: '2k', quality: 'medium' });
   }
-  for (const id of Object.keys(BASIC_BUILDINGS)) {
-    jobs.push({ id, type: 'building', prompt: buildingPrompt(id), aspect: BASIC_BUILDINGS[id].aspect, resolution: '1k', quality: 'medium' });
+  for (const id of Object.keys(MORE_LANDMARKS)) {
+    jobs.push({ id, type: 'building', prompt: buildingPrompt(id), aspect: MORE_LANDMARKS[id].aspect, resolution: '1k', quality: 'medium' });
   }
   for (const [id, scene] of Object.entries(SKIES)) {
     jobs.push({ id, type: 'background', aspect: '16:9', resolution: '2k', quality: 'medium',

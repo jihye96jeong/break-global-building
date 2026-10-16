@@ -1,15 +1,13 @@
 // Visuals for one falling building: the landmark art cut into one image per logical floor along jagged lines
-// shared by neighbouring floors (no seams while standing, a broken edge when one falls), plus per-lane material
-// marks that tell weak (1 hit), normal (2) and hard (3) apart. Logic never reads pixels.
+// shared by neighbouring floors (no seams while standing, a broken edge when one falls). The art is shown as it is
+// (no crack overlays); what each lane takes to break is shown by the chips under the lowest floor.
 import { landmarkById, type Landmark } from '../config/landmarks';
-import type { FallingBuilding, Floor } from '../core/building';
+import type { FallingBuilding } from '../core/building';
 import { hashString, makeRng } from '../core/rng';
 import { imageNow } from './assets';
 
 export interface FloorVisual {
   canvas: HTMLCanvasElement; // the floor's art (alpha), includes the jag margin above and below
-  marks: HTMLCanvasElement; // material overlay, same size
-  marksKey: string;
   padTop: number; // world units of canvas above the floor's top edge
   padBottom: number;
   color: string; // average colour for chips
@@ -134,65 +132,7 @@ export function buildVisual(b: FallingBuilding, worldW: number, scale: number): 
       for (let p = 0; p < d.length; p += 4 * 37) if (d[p + 3] > 128) { r += d[p]; gg += d[p + 1]; bb += d[p + 2]; n++; }
       if (n) color = `rgb(${(r / n) | 0},${(gg / n) | 0},${(bb / n) | 0})`;
     } catch { /* tainted canvas: palette colour */ }
-    const marks = document.createElement('canvas');
-    marks.width = c.width; marks.height = c.height;
-    floors.set(f.id, { canvas: c, marks, marksKey: '', padTop, padBottom, color });
+    floors.set(f.id, { canvas: c, padTop, padBottom, color });
   });
   return { buildingId: b.id, landmark, width, floors, fallback: !img };
-}
-
-/** Repaint a floor's material marks when its HP changed. 1 = cracked & glowing, 2 = plain, 3 = steel-braced. */
-export function refreshMarks(v: BuildingVisual, f: Floor, scale: number, time: number) {
-  const fv = v.floors.get(f.id);
-  if (!fv) return;
-  const key = f.hp.join('');
-  if (key === fv.marksKey) return;
-  fv.marksKey = key;
-  const c = fv.marks, g = c.getContext('2d')!;
-  g.globalCompositeOperation = 'source-over';
-  g.clearRect(0, 0, c.width, c.height);
-  const laneW = c.width / 3;
-  const y0 = fv.padTop * scale, hh = f.height * scale;
-  const rng = makeRng(hashString(f.id));
-  for (let lane = 0; lane < 3; lane++) {
-    const hp = f.hp[lane];
-    const x0 = lane * laneW + laneW * 0.06, w = laneW * 0.88;
-    if (hp >= 3) {
-      // reinforced: steel cross-hatch and a gold frame
-      g.fillStyle = 'rgba(52,64,92,0.55)'; g.fillRect(x0, y0, w, hh);
-      g.strokeStyle = 'rgba(210,225,245,0.55)'; g.lineWidth = Math.max(1, scale * 1.4);
-      g.beginPath();
-      for (let d = -hh; d < w; d += 9 * scale) { g.moveTo(x0 + d, y0 + hh); g.lineTo(x0 + d + hh, y0); g.moveTo(x0 + d, y0); g.lineTo(x0 + d + hh, y0 + hh); }
-      g.save(); g.beginPath(); g.rect(x0, y0, w, hh); g.clip();
-      g.stroke(); g.restore();
-      g.strokeStyle = '#e2b54a'; g.lineWidth = Math.max(2, scale * 2.6);
-      g.strokeRect(x0 + g.lineWidth / 2, y0 + g.lineWidth / 2, w - g.lineWidth, hh - g.lineWidth);
-      g.fillStyle = '#f6e7b6';
-      for (const [px, py] of [[0.12, 0.2], [0.88, 0.2], [0.12, 0.8], [0.88, 0.8]]) { g.beginPath(); g.arc(x0 + w * px, y0 + hh * py, Math.max(1.5, scale * 2.2), 0, Math.PI * 2); g.fill(); }
-    } else if (hp === 1) {
-      // weak: bright cracks
-      g.fillStyle = 'rgba(255,236,150,0.22)'; g.fillRect(x0, y0, w, hh);
-      g.lineCap = 'round';
-      for (let k = 0; k < 2; k++) {
-        const cx = x0 + w * rng.range(0.3, 0.7), cy = y0 + hh * rng.range(0.35, 0.65);
-        for (let a = 0; a < 5; a++) {
-          const ang = (a / 5) * Math.PI * 2 + rng.range(-0.4, 0.4);
-          let x = cx, y = cy;
-          g.beginPath(); g.moveTo(x, y);
-          for (let s = 0; s < 3; s++) { x += Math.cos(ang + rng.range(-0.5, 0.5)) * w * 0.12; y += Math.sin(ang + rng.range(-0.5, 0.5)) * hh * 0.18; g.lineTo(x, y); }
-          g.strokeStyle = 'rgba(255,240,170,0.95)'; g.lineWidth = Math.max(2, scale * 3); g.stroke();
-          g.strokeStyle = 'rgba(40,20,10,0.95)'; g.lineWidth = Math.max(1, scale * 1.3); g.stroke();
-        }
-      }
-    } else if (f.initialHp[lane] === 3) {
-      // hard lane already hit once: scratched plating
-      g.strokeStyle = 'rgba(30,30,50,0.7)'; g.lineWidth = Math.max(1, scale * 1.5);
-      for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(x0 + w * rng.range(0.1, 0.5), y0 + hh * rng.range(0.1, 0.9)); g.lineTo(x0 + w * rng.range(0.5, 0.9), y0 + hh * rng.range(0.1, 0.9)); g.stroke(); }
-    }
-  }
-  // keep marks on the art only, never on the sky between lattice beams
-  g.globalCompositeOperation = 'destination-in';
-  g.drawImage(fv.canvas, 0, 0);
-  g.globalCompositeOperation = 'source-over';
-  void time;
 }

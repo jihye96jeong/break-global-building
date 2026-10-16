@@ -7,7 +7,7 @@ import { attackSurfaceY, guardPlaneY, headY, heroLanePos, motionOwner, type RunS
 import type { Banners, Camera } from './camera';
 import { imageNow } from './assets';
 import { drawHero } from './character';
-import { refreshMarks, type BuildingVisual } from './landmark';
+import type { BuildingVisual } from './landmark';
 import type { Particles } from './particles';
 
 const SKY_GRAD: Record<string, [string, string]> = { day: ['#7cc4f2', '#d9f0ff'], sunset: ['#ff9a62', '#ffe0b0'], night: ['#0d1638', '#33407a'] };
@@ -384,13 +384,11 @@ export class Renderer {
     for (const f of b.floors) {
       const fv = v.floors.get(f.id);
       if (!fv) { bottom -= f.height; continue; }
-      refreshMarks(v, f, this.scale, time);
       const top = bottom - f.height;
       const y = top - fv.padTop, h = f.height + fv.padTop + fv.padBottom;
       const lowest = f === b.floors[0];
       if (lowest) { g.save(); g.beginPath(); g.rect(x0 - 40, top - fv.padTop - 2, v.width + 80, b.bottomY - top + fv.padTop + 2); g.clip(); } // nothing drawn below the collision line
       g.drawImage(fv.canvas, x0, y, v.width, h);
-      g.drawImage(fv.marks, x0, y, v.width, h);
       if (lowest) g.restore();
       bottom = top;
     }
@@ -423,7 +421,6 @@ export class Renderer {
       // pips: one per hit still needed
       g.fillStyle = hp === 3 ? '#e2b54a' : '#1b1530';
       for (let k = 0; k < hp; k++) { g.beginPath(); g.arc(cx + (k - (hp - 1) / 2) * 9, cy, 2.6, 0, Math.PI * 2); g.fill(); }
-      if (hp === 1) { g.strokeStyle = '#1b1530'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx - w / 2 + 4, cy - 3); g.lineTo(cx - 6, cy + 3); g.lineTo(cx - 2, cy - 2); g.stroke(); }
       if (active) { g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.beginPath(); g.roundRect(cx - w / 2 - 4, cy - h / 2 - 4, w + 8, h + 8, 10); g.stroke(); }
       if (showHp) { g.fillStyle = '#fff'; g.font = '900 13px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(`HP${hp}`, cx, cy - 12); }
     }
