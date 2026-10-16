@@ -235,8 +235,11 @@ export class Renderer {
       refreshMarks(v, f, this.scale, time);
       const top = bottom - f.height;
       const y = top - fv.padTop, h = f.height + fv.padTop + fv.padBottom;
+      const lowest = f === b.floors[0];
+      if (lowest) { g.save(); g.beginPath(); g.rect(x0 - 40, top - fv.padTop - 2, v.width + 80, b.bottomY - top + fv.padTop + 2); g.clip(); } // nothing drawn below the collision line
       g.drawImage(fv.canvas, x0, y, v.width, h);
       g.drawImage(fv.marks, x0, y, v.width, h);
+      if (lowest) g.restore();
       bottom = top;
     }
     if (b.elite) g.restore();
@@ -244,10 +247,19 @@ export class Renderer {
     // lane chips under the current lowest floor: what each lane takes to break
     const f0 = b.floors[0];
     if (!f0) return;
+    // v3 VIS-01: a solid underside beam across all three lanes, its lower edge exactly on the collision line, so the
+    // surface the blade meets is always visible even where the landmark art is narrow or transparent
+    const bx = this.worldW / 2 - this.laneGap * 1.5, bw = this.laneGap * 3, beam = 6;
+    g.fillStyle = v.floors.get(f0.id)?.color ?? '#8a8378';
+    g.fillRect(bx, b.bottomY - beam, bw, beam);
+    g.fillStyle = 'rgba(20,16,40,.55)';
+    g.fillRect(bx, b.bottomY - 2, bw, 2);
+    g.strokeStyle = '#1b1530'; g.lineWidth = 1.5;
+    g.strokeRect(bx, b.bottomY - beam, bw, beam);
     for (let lane = 0; lane < 3; lane++) {
       const hp = f0.hp[lane];
       // inside the lowest floor, just above its underside: the guard contact point stays clear
-      const cx = this.laneX(lane), cy = b.bottomY - 11;
+      const cx = this.laneX(lane), cy = b.bottomY - 16;
       const w = Math.min(46, this.laneGap * 0.7), h = 14;
       const col = hp === 1 ? '#ffd84a' : hp === 2 ? '#e9eef7' : '#5d6f94';
       const active = s.player.lane === lane;
