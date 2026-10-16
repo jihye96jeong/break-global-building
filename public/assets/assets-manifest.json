@@ -266,6 +266,48 @@
       "source": "art-source/character/hero_hit.webp",
       "bytes": 162608,
       "success": true
+    },
+    "building:empire_state": {
+      "id": "empire_state",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable Empire State Building in New York, USA: tall limestone-grey Art Deco skyscraper with stepped setbacks near the top, vertical window stripes, a slim mast and antenna spire on top. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "1:2",
+      "resolution": "2k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T00:48:02.910Z",
+      "source": "art-source/building/empire_state.png",
+      "bytes": 2938098,
+      "success": true
+    },
+    "building:taipei_101": {
+      "id": "taipei_101",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable Taipei 101 skyscraper in Taipei, Taiwan: tall green-blue glass skyscraper built from eight repeated flared pagoda-like segments stacked on a tapered base, clearly separated repeating segments, slim spire on top. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "1:2",
+      "resolution": "2k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T00:49:43.051Z",
+      "source": "art-source/building/taipei_101.png",
+      "bytes": 3159639,
+      "success": true
+    },
+    "building:petronas_towers": {
+      "id": "petronas_towers",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable Petronas Twin Towers in Kuala Lumpur, Malaysia: two identical tall silver stainless-steel towers side by side with stepped tiers and pointed spires, joined by a two-storey sky bridge in the middle. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "2:3",
+      "resolution": "2k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T00:51:49.519Z",
+      "source": "art-source/building/petronas_towers.png",
+      "bytes": 3683538,
+      "success": true
     }
   },
   "note": "art-source files were re-encoded to WebP (buildings/characters lossless) after download to keep the repo small"

@@ -8,7 +8,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'art-source');
 const OUT = path.join(ROOT, 'public', 'assets');
 // art-source/character (optional illustrated hero) is not shipped: the game draws a stick figure
-const OUT_DIR = { building: 'buildings', background: 'backgrounds' };
+const OUT_DIR = { building: 'buildings', background: 'backgrounds', fx: 'fx' };
 const only = process.argv.find((a) => a.startsWith('--id='))?.slice(5);
 
 // "magenta-ness": how far both R and B sit above G. Pure #FF00FF scores 255; art rarely above ~60.
@@ -94,7 +94,7 @@ async function main() {
       if (only && id !== only) continue;
       const out = path.join(OUT, OUT_DIR[type], `${id}.webp`);
       const src = path.join(dir, f);
-      const info = type === 'background' ? await background(src, out)
+      const info = type === 'background' || type === 'fx' ? await background(src, out)
         : type === 'building' ? await sprite(src, out, 1100, 1300)
         : await sprite(src, out, 320, 320);
       meta[`${type}:${id}`] = { file: path.relative(path.join(ROOT, 'public'), out), ...info };
