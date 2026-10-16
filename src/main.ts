@@ -47,7 +47,6 @@ state.phase = 'BOOT';
 let visual: BuildingVisual | null = null;
 let bgLandmark = LANDMARKS[0].id;
 const effects = { flash: 0, red: 0, cutin: 0, recoil: 0, recoilMs: 0, recoilAmp: 0, recoilDur: 1, danger: 0, panY: 0, slashGlow: 0 };
-let keyGuideMs = 0; // v4: the in-game key row shows for 4 s at the start of a run, then fades
 const pendingBursts: { at: number; fn: () => void }[] = [];
 const eventLog: string[] = []; // debug panel only
 
@@ -173,7 +172,6 @@ function resetForRun() {
   last.lives = -1; last.score = -1; last.combo = -1; last.special = -1; last.bid = '';
   hintStep = 0; hint3Shown = false; tutorialActive = !save.tutorialSeen;
   $('hint').classList.add('hidden');
-  keyGuideMs = 4000; $('keyguide').classList.remove('faded');
 }
 
 function begin() {
@@ -186,7 +184,6 @@ function begin() {
   last.lives = -1; last.score = -1; last.combo = -1; last.special = -1; last.bid = '';
   hintStep = 0; hint3Shown = false; tutorialActive = !save.tutorialSeen;
   $('hint').classList.add('hidden');
-  keyGuideMs = 4000; $('keyguide').classList.remove('faded');
   showOverlay(null);
   audio.play('start');
 }
@@ -471,7 +468,6 @@ function frame(now: number) {
     const panTarget = q && !q.finished ? Math.max(0, Math.min(420, 120 - q.slashY)) : 0;
     effects.panY += (panTarget - effects.panY) * Math.min(1, dt * (panTarget > effects.panY ? 14 : 7));
     effects.slashGlow = q ? 1 : Math.max(0, effects.slashGlow - dt * 4);
-    if (keyGuideMs > 0) { keyGuideMs -= dt * 1000; if (keyGuideMs <= 0) $('keyguide').classList.add('faded'); }
     // tutorial hint 3: when the building first gets close
     if (tutorialActive && !hint3Shown && hintStep >= 1 && state.building && state.building.bottomY > DANGER_Y - 110 && state.phase === 'PLAYING') {
       hint3Shown = true; showHint(t('hint3'), 2000);

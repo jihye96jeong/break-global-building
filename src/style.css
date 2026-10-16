@@ -72,6 +72,9 @@ canvas#view { position: absolute; inset: 0; width: 100%; height: 100%; display: 
   gap: 4px 12px; font-size: 13px; font-weight: 700; transition: opacity .4s; }
 .control-hints > span { display: inline-flex; flex: 0 0 auto; white-space: nowrap; word-break: keep-all; writing-mode: horizontal-tb; }
 .control-hints.faded { opacity: 0; }
+/* the in-game key guide: always on, fixed in the bottom bar, one horizontal line that never wraps */
+#keyguide { flex-wrap: nowrap; justify-content: safe center; overflow: hidden; white-space: nowrap; gap: 0 clamp(8px, 1.4vw, 16px);
+  font-size: clamp(10px, 1.15vw, 14px); opacity: .95; }
 #hud { left: 0; right: 0; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
 .hud-left, .hud-right { min-width: 0; }
 .where { min-width: 0; } .where > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -138,15 +141,18 @@ kbd { display: inline-block; padding: 0 .45em; margin: 0 .1em; border-radius: .3
   #hearts svg { width: 24px; height: 22px; }
   .icon-btn { width: 40px; height: 40px; }
   .hint { bottom: 40px; font-size: 13px; }
-  .gauge { flex-basis: 60%; }
-  .control-hints { display: none; }
+  .gauge { flex: 0 1 150px; gap: 5px; }
+  .gauge .g-lbl { font-size: 11px; }
+  .g-track { min-width: 50px; }
+  #special-pct { display: none; }
+  #status { gap: 8px; padding-left: 8px; padding-right: 8px; }
+  #keyguide { gap: 0 7px; font-size: 9.5px; }
   .where .next { display: none; }
 }
 @media (max-width: 440px) {
   .where { display: none; } /* tier and landmark name are on the wave card; the score needs the room */
 }
 @media (max-height: 460px) {
-  .control-hints { display: none; }
   #hud { padding-top: 4px; }
   .where .next { display: none; }
 }
