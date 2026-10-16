@@ -1,8 +1,8 @@
 // Canvas drawing in world units: the world is 600 tall; its width follows the screen's aspect (spec §11.1).
 import { BALANCE, DANGER_Y, GROUND_Y, WORLD_H } from '../config/balance';
-import { JUMP_FEEL } from '../config/gameFeel';
+import { GUARD_FEEL, JUMP_FEEL } from '../config/gameFeel';
 import { landmarkById } from '../config/landmarks';
-import { guardPlaneY, type RunState } from '../core/game';
+import { attackSurfaceY, guardPlaneY, headY, heroLanePos, type RunState } from '../core/game';
 import type { Banners, Camera } from './camera';
 import { imageNow } from './assets';
 import { drawHero } from './character';
@@ -17,6 +17,7 @@ export interface FrameFx {
   recoil: number; // render-only upward kick of the building after a floor break (wu)
   danger: number; // 0..1 DANGER pulse
   debug: boolean;
+  debugContact: boolean;
   flash: number; // 0..1 white flash
   redFlash: number; // 0..1 hurt tint
   cutin: number; // 0..1 special cut-in strength
@@ -48,6 +49,7 @@ export class Renderer {
     this.worldW = r.width / this.cssScale;
   }
 
+  /** Works for fractional lanes too: the hero mid-slide is drawn at exactly the position the contact test uses. */
   laneX(lane: number) { return this.worldW / 2 + (lane - 1) * this.laneGap; }
 
   /** Screen (CSS px) x → lane index, for touch lane taps. */
@@ -75,12 +77,10 @@ export class Renderer {
 
     fx.draw(g);
     const p = s.player;
-    const k = p.laneAnimMs > 0 ? 1 - p.laneAnimMs / BALANCE.laneMoveMs : 1;
-    const ease = 1 - (1 - k) * (1 - k);
-    const x = this.laneX(p.laneFrom) + (this.laneX(p.lane) - this.laneX(p.laneFrom)) * ease;
+    const x = this.laneX(heroLanePos(p));
     const invuln = s.invulnMs > 0 && s.phase !== 'SPECIAL_CUTIN';
     const c = s.guardContact;
-    const guardK = c ? Math.min(1, c.phaseMs / (s.guardPhase === 'HOLD' ? 120 : s.guardPhase === 'REPEL' ? 200 : 80)) : 0;
+    const guardK = c ? Math.min(1, c.phaseMs / (s.guardPhase === 'HOLD' ? GUARD_FEEL.holdMs[c.kind] : s.guardPhase === 'REPEL' ? GUARD_FEEL.repelMs[c.kind] : GUARD_FEEL.releaseBlendMs)) : 0;
     const ceiling = b && !b.defeated ? Math.max(0, GROUND_Y - p.y - b.bottomY) : Infinity;
     // rising speed lines and falling streaks
     if (p.y > 20 && !f.reducedMotion) {
@@ -103,7 +103,7 @@ export class Renderer {
       special: s.phase === 'SPECIAL_CUTIN' ? Math.sin(Math.min(1, 1 - s.phaseMs / BALANCE.specialCutinMs) * Math.PI) : 0,
       ceiling, time, blink: invuln && Math.floor(time / 80) % 2 === 0,
     });
-    if (f.debug) this.drawDebug(s, x);
+    if (f.debug || f.debugContact) this.drawDebug(s, x);
     fx.drawPops(g);
     g.restore();
 
@@ -127,6 +127,7 @@ export class Renderer {
       g.restore();
       by += bn.size + 8;
     }
+    if (f.debugContact) this.drawContactPanel(s);
     if (f.danger > 0) {
       g.save(); g.globalAlpha = f.danger;
       this.bigText('DANGER', GROUND_Y + 34, 26, '#ff6b5e');
@@ -134,17 +135,61 @@ export class Renderer {
     }
   }
 
+  /** Thin lines in the same camera transform as the sprites: attack surface, guard surface, the lane's underside, gap. */
   private drawDebug(s: RunState, heroX: number) {
     const g = this.g;
-    g.save();
-    g.setLineDash([6, 4]); g.lineWidth = 1.5;
-    g.strokeStyle = '#00e0ff'; g.beginPath(); g.moveTo(heroX - 60, guardPlaneY(s)); g.lineTo(heroX + 60, guardPlaneY(s)); g.stroke();
-    g.strokeStyle = '#ff4040'; g.beginPath(); g.moveTo(0, DANGER_Y); g.lineTo(this.worldW, DANGER_Y); g.stroke();
     const b = s.building;
-    if (b && b.floors[0]) {
-      g.strokeStyle = '#7dff6a'; g.setLineDash([]);
+    const line = (y: number, x0: number, x1: number, col: string, dash: number[] = []) => {
+      g.strokeStyle = col; g.setLineDash(dash); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke();
+    };
+    g.save();
+    g.lineWidth = 1;
+    const half = this.laneGap * 0.32;
+    line(attackSurfaceY(s), heroX - half, heroX + half, '#ffe14a');
+    line(guardPlaneY(s), heroX - half, heroX + half, '#00e0ff', [4, 3]);
+    line(DANGER_Y, 0, this.worldW, 'rgba(255,64,64,.8)', [6, 4]);
+    if (b && !b.defeated && b.floors[0]) {
+      const lx = this.laneX(s.player.lane);
+      line(b.bottomY, lx - this.laneGap / 2, lx + this.laneGap / 2, '#7dff6a');
+      g.setLineDash([]);
+      g.strokeStyle = 'rgba(125,255,106,.35)';
       g.strokeRect(this.worldW / 2 - this.laneGap * 1.5, b.bottomY - b.floors[0].height, this.laneGap * 3, b.floors[0].height);
+      // gap connector + number
+      const gap = attackSurfaceY(s) - b.bottomY;
+      g.strokeStyle = Math.abs(gap) <= 2 ? '#7dff6a' : '#ff9a62';
+      g.beginPath(); g.moveTo(heroX + half + 6, attackSurfaceY(s)); g.lineTo(heroX + half + 6, b.bottomY); g.stroke();
+      g.fillStyle = '#fff'; g.font = '700 10px ui-monospace, monospace'; g.textAlign = 'left';
+      g.fillText(`${gap >= 0 ? '+' : ''}${gap.toFixed(1)}`, heroX + half + 10, (attackSurfaceY(s) + b.bottomY) / 2 + 3);
     }
+    if (s.contact.lastEvent === 'ATTACK_HIT' && s.player.attackAnimMs > 0) { g.strokeStyle = '#7dff6a'; g.beginPath(); g.arc(heroX, attackSurfaceY(s), 3, 0, Math.PI * 2); g.stroke(); }
+    if (s.guardPhase === 'HOLD' && s.guardContact) { g.strokeStyle = '#00e0ff'; g.beginPath(); g.arc(heroX, s.guardContact.contactY, 7, 0, Math.PI * 2); g.stroke(); }
+    g.restore();
+  }
+
+  /** ?debugContact=1: the numbers that prove a hit or guard really touched (spec v3 §9). Screen space, no shake. */
+  private drawContactPanel(s: RunState) {
+    const g = this.g, b = s.building, c = s.contact;
+    const fmt = (n: number) => (Number.isFinite(n) ? `${n >= 0 ? '+' : ''}${n.toFixed(1)}wu` : '—');
+    const lines = [
+      `ATTACK [${c.lastEvent === 'ATTACK_HIT' ? 'HIT' : c.lastEvent === 'ATTACK_WHIFF' ? 'WHIFF' : '-'}]  lane=${s.player.lane}`,
+      `Attack gap: ${b ? fmt(attackSurfaceY(s) - b.bottomY) : '—'}`,
+      `Guard gap:  ${b ? fmt(guardPlaneY(s) - b.bottomY) : '—'}`,
+      `Player attackSurface Y: ${attackSurfaceY(s).toFixed(1)}`,
+      `Player guardSurface  Y: ${guardPlaneY(s).toFixed(1)}  head ${headY(s).toFixed(1)}`,
+      `Building visibleBottom Y: ${b ? b.bottomY.toFixed(1) : '—'}`,
+      `TOI: ${c.toi === null ? 'none' : c.toi.toFixed(2)}   X overlap: ${c.xOverlap}`,
+      `Guard state: ${s.guardPhase}`,
+      `Building velocityY: ${b ? b.velocityY.toFixed(1) : '—'}wu/s`,
+      `Motion owner: ${s.guardPhase === 'HOLD' || s.guardPhase === 'REPEL' || s.guardPhase === 'RELEASE' ? 'GUARD' : 'FALL'}`,
+      `Contact ID: ${c.contactId || '—'}`,
+      `Attack id: A${String(s.swingIds).padStart(5, '0')}`,
+      `Last confirmed event: ${c.lastEvent || '—'}`,
+    ];
+    g.save();
+    g.fillStyle = 'rgba(10,8,24,.78)';
+    g.fillRect(8, 70, 250, lines.length * 13 + 10);
+    g.fillStyle = '#d7ffe0'; g.font = '600 10.5px ui-monospace, monospace'; g.textAlign = 'left'; g.textBaseline = 'top';
+    lines.forEach((l, i) => g.fillText(l, 14, 76 + i * 13));
     g.restore();
   }
 

@@ -1,9 +1,9 @@
 // Developer-only feel panel: ?debugFeel=1. Live sliders for the feel config, scenario buttons and an event log.
 // Never shown to players (only mounted when the query flag is present).
 import { BALANCE, DANGER_Y } from './config/balance';
-import { ATTACK_FEEL, CAMERA_FEEL, GUARD_FEEL, HITSTOP_MS, JUMP_FEEL } from './config/gameFeel';
+import { ATTACK_FEEL, CAMERA_FEEL, CONTACT, GUARD_FEEL, HITSTOP_MS, JUMP_FEEL } from './config/gameFeel';
 import type { FallingBuilding, Floor, HP } from './core/building';
-import { guardPlaneY, type RunState } from './core/game';
+import { attackSurfaceY, guardPlaneY, type RunState } from './core/game';
 import type { Camera } from './render/camera';
 import type { Particles } from './render/particles';
 
@@ -17,15 +17,18 @@ export function mountDebugPanel(ctx: Ctx) {
     ['jump velocity', JUMP_FEEL, 'jumpVelocity', 650, 1000, 10],
     ['gravity up', JUMP_FEEL, 'gravityAscending', 1300, 2200, 10],
     ['gravity down', JUMP_FEEL, 'gravityDescending', 1900, 3400, 10],
-    ['contact look-ahead', GUARD_FEEL, 'contactLookAhead', 8, 22, 1],
+    ['touch tolerance (wu)', CONTACT, 'touchEpsilonWu', 0, 4, 0.5],
+    ['attack reach above head', CONTACT, 'attackReachAboveHead', 6, 20, 1],
+    ['fall-back accel', CONTACT, 'fallAccel', 1500, 6000, 100],
+    ['post-break settle speed', CONTACT, 'postBreakSettleSpeed', 200, 400, 10],
     ['hit-stop hit (ms)', HITSTOP_MS, 'hit', 0, 85, 1],
     ['hit-stop floor (ms)', HITSTOP_MS, 'floor', 0, 85, 1],
     ['attack interval (ms)', BALANCE, 'attackIntervalMs', 80, 120, 1],
   ];
   const nested: [string, Record<string, number>, 'ground' | 'air', number, number][] = [
     ['hold ground (ms)', GUARD_FEEL.holdMs, 'ground', 80, 180], ['hold air (ms)', GUARD_FEEL.holdMs, 'air', 80, 180],
-    ['repel ground (wu)', GUARD_FEEL.repelUnits, 'ground', 55, 110], ['repel air (wu)', GUARD_FEEL.repelUnits, 'air', 20, 55],
-    ['repel ground (ms)', GUARD_FEEL.repelMs, 'ground', 120, 300], ['repel air (ms)', GUARD_FEEL.repelMs, 'air', 120, 300],
+    ['repel ground (wu)', GUARD_FEEL.repelUnits, 'ground', 28, 42], ['repel air (wu)', GUARD_FEEL.repelUnits, 'air', 14, 24],
+    ['repel ground (ms)', GUARD_FEEL.repelMs, 'ground', 120, 260], ['repel air (ms)', GUARD_FEEL.repelMs, 'air', 100, 220],
   ];
   const row = (label: string, obj: { [k: string]: unknown }, key: string, min: number, max: number, step = 1) => {
     const wrap = document.createElement('label');
@@ -54,6 +57,8 @@ export function mountDebugPanel(ctx: Ctx) {
   const setBottom = (y: number) => { if (s.building) { s.building.bottomY = y; s.building.velocityY = s.building.baseSpeed; } };
   btn('Jump Test', () => setBottom(-400));
   btn('Guard Ground', () => setBottom(guardPlaneY(s) - 40));
+  btn('Far Attack 80wu', () => { setBottom(attackSurfaceY(s) - 80); if (s.building) { s.building.velocityY = 0; s.building.baseSpeed = 0; } });
+  btn('Fast Fall ×2.4', () => { if (s.building) { s.building.baseSpeed = 115 * 2.4; s.building.velocityY = s.building.baseSpeed; s.building.bottomY = guardPlaneY(s) - 120; } });
   btn('Guard Air', () => setBottom(DANGER_Y - 230));
   btn('One-Hit [1,2,3]', () => { const b = s.building as FallingBuilding | null; if (b && b.floors[0]) { b.floors[0].hp = [1, 2, 3]; b.floors[0].initialHp = [1, 2, 3]; } });
   btn('Special 100', () => { s.special = 100; });
@@ -67,7 +72,7 @@ export function mountDebugPanel(ctx: Ctx) {
     ctx.camera.scale = shake.m;
     const b = s.building;
     info.textContent = `phase ${s.phase}  guard ${s.guardPhase}\nfeetY ${s.player.y.toFixed(1)} vy ${s.player.vy.toFixed(0)} apex ${s.player.peakY.toFixed(1)}\n` +
-      `bottomY ${b ? b.bottomY.toFixed(1) : '-'} plane ${guardPlaneY(s).toFixed(1)} gap ${b ? (guardPlaneY(s) - b.bottomY).toFixed(1) : '-'}\n` +
+      `bottomY ${b ? b.bottomY.toFixed(1) : '-'} attack gap ${b ? (attackSurfaceY(s) - b.bottomY).toFixed(1) : '-'} guard gap ${b ? (guardPlaneY(s) - b.bottomY).toFixed(1) : '-'}\n` +
       `freeze ${s.freezeMs.toFixed(0)}ms particles ${ctx.fx.parts.length}\ncamera cap ${CAMERA_FEEL.cap}\n---\n${ctx.eventLog.join('\n')}`;
   };
 }

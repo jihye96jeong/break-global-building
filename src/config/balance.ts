@@ -23,14 +23,12 @@ export const BALANCE = {
   laneRepeatMs: 130, // holding ←/→ moves one lane per this interval
   attackIntervalMs: 95, // v2: ~10.5 hits per second
   attackAnimMs: 90,
-  attackBufferMs: 100, // a press during cooldown / guard hold is remembered this long
   heroHeight: HERO_HEIGHT,
 
   // falling building
   baseFallSpeed: 115, // units/s at tier 1
   hitPushUp: 7, // every successful hit nudges the building up
   fallCapFactor: 1.12, // speed never exceeds base * tier * this
-  speedRecoverMs: 800, // after a guard the fall speed returns to normal over this time
   waveGapMs: 450, // name card between buildings
   countdownMs: 750, // 3 → 2 → 1
   hitFreezeMs: 120,
@@ -39,12 +37,10 @@ export const BALANCE = {
 
   // guard
   guardMax: 100,
-  guardWindowMs: 250, // a ↓ press guards for at least this long
-  guardHoldDrainPerSec: 12,
   guardRegenPerSec: 18,
   guardRegenDelayMs: 250,
-  ground: { cost: 30, speedFactor: 0.3, keepsCombo: false },
-  air: { cost: 18, speedFactor: 0.55, keepsCombo: true, comboExtendMs: 450 },
+  ground: { cost: 30, keepsCombo: false },
+  air: { cost: 18, keepsCombo: true, comboExtendMs: 450 },
 
   // combo / score / special
   comboWindowMs: 1500,

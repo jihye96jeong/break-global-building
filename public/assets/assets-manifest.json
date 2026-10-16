@@ -412,13 +412,13 @@
       "type": "character",
       "model": "grok-imagine-image-2.0",
       "mode": "edit",
-      "prompt": "Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now a powerful upward slash: springing up with the giant sword swung straight up overhead toward the sky, blade pointing up, scarf whipping. Plain solid flat magenta (#FF00FF) background, character only, no effects, no text, no shadow.",
+      "prompt": "Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now a fierce upward slash that connects just above the head: legs braced, both arms raised, the giant sword swept flat and nearly horizontal slightly above the top of the head, blade edge facing up, slight motion tilt, scarf whipping. The blade is the highest point and sits only a little above the head. Plain solid flat magenta (#FF00FF) background, character only, no effects, no text, no shadow.",
       "aspect_ratio": "1:1",
       "resolution": "1k",
       "quality": "medium",
-      "generatedAt": "2026-10-16T01:10:30.974Z",
-      "source": "art-source/character/ninja_attack.webp",
-      "bytes": 149276,
+      "generatedAt": "2026-10-16T02:32:47.126Z",
+      "source": "art-source/character/ninja_attack.jpg",
+      "bytes": 161740,
       "success": true
     },
     "character:ninja_jump": {

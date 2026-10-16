@@ -29,6 +29,8 @@ export interface FallingBuilding {
   bottomY: number;
   baseSpeed: number;
   velocityY: number;
+  /** post-floor-break fast settle onto the blade (ms left) */
+  settleMs?: number;
   tier: number;
   elite: boolean;
   defeated: boolean;

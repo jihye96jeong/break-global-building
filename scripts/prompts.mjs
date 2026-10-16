@@ -143,9 +143,11 @@ const NINJA = 'An original cool arcade ninja hero, sleek midnight-indigo ninja o
   'The character and sword must not contain any magenta or pink colour.';
 export const NINJA_POSES = {
   ninja_idle: `${NINJA_ANCHOR}\n${NINJA} Ready stance, knees bent, the giant sword resting on one shoulder.`,
-  ninja_attack: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now a powerful upward slash: ' +
-    'springing up with the giant sword swung straight up overhead toward the sky, blade pointing up, scarf whipping. ' +
-    'Plain solid flat magenta (#FF00FF) background, character only, no effects, no text, no shadow.',
+  // v3: the blade must meet the building just above the head (short, honest reach), like the guard pose but slashing
+  ninja_attack: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now a fierce upward slash ' +
+    'that connects just above the head: legs braced, both arms raised, the giant sword swept flat and nearly horizontal ' +
+    'slightly above the top of the head, blade edge facing up, slight motion tilt, scarf whipping. The blade is the highest point ' +
+    'and sits only a little above the head. Plain solid flat magenta (#FF00FF) background, character only, no effects, no text, no shadow.',
   ninja_jump: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now mid-air in a high jump: ' +
     'knees tucked, giant sword held back ready to strike, scarf trailing. Plain solid flat magenta (#FF00FF) background, character only, no text, no shadow.',
   ninja_guard: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now guarding: crouched low, ' +

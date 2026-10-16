@@ -12,23 +12,42 @@ export const JUMP_FEEL = {
   takeoffStretchMs: 100,
 };
 
+/**
+ * v3.0 contact geometry: an attack or guard counts only when the pose's visible contact surface actually meets the
+ * underside of the lowest floor (swept across the tick, so fast falls cannot skip it). 2 wu is a pixel tolerance, not a range.
+ */
+export const CONTACT = {
+  touchEpsilonWu: 2, // gap ≤ this counts as touching
+  maxPenetrationWu: 3, // deeper overlap than this never hits / guards
+  attackReachAboveHead: 12, // attack pose: the swept blade's top edge, drawn exactly here
+  bladeHalfWidth: 0.32, // lane units: horizontal half-span of the blade around the hero
+  minHorizontalOverlap: 0.02, // lane units (≈ 2 wu)
+  attackActiveMs: 55, // a tapped swing can connect during this window only
+  heldActiveMs: 95, // auto-repeat while Z is held: the blade stays live until the next swing (no dead gaps)
+  attackBufferMs: 70,
+  fallAccel: 3000, // wu/s²: a struck building stops dead, then falls back onto the blade
+  postBreakSettleSpeed: 400, // wu/s: the next floor drops fast onto the blade after a floor break…
+  postBreakSettleMs: 140,
+  postBreakSettleAccel: 6000,
+  settleEaseGap: [6, 26] as [number, number], // …easing back to normal speed over the last 26 → 6 wu
+};
+
 export const GUARD_FEEL = {
-  guardReachAboveHead: 8, // the raised sword is 8 wu above the head: that is the contact plane
-  contactLookAhead: 16, // contact happens when the building's underside is within this of the plane
-  maxSnapCorrection: 7, // never snap more than this; deeper overlap means the guard came too late
-  braceCompression: 4,
+  guardReachAboveHead: 8, // guard pose: the raised flat blade is 8 wu above the head
+  readyWindowMs: 180, // one press arms the guard this long; holding longer does nothing (no auto-guard)
+  preContactBufferMs: 70, // a press released early still counts if contact comes within this
+  braceCompression: { ground: 4, air: 2.5 },
   braceCompressionMs: 35,
-  holdMs: { ground: 120, air: 110 },
-  repelUnits: { ground: 85, air: 35 },
-  repelMs: { ground: 210, air: 160 },
-  releaseBlendMs: 80,
+  holdMs: { ground: 120, air: 100 },
+  repelUnits: { ground: 36, air: 18 },
+  repelMs: { ground: 170, air: 140 },
+  releaseBlendMs: 70,
   contactCooldownMs: 280,
-  counterWindowMs: 350, // a hit this soon after a guard shows COUNTER! (no extra damage)
+  counterWindowMs: 500, // a real re-contact hit this soon after the push shows COUNTER! (no extra damage)
 };
 
 export const ATTACK_FEEL = {
   intervalMs: 95,
-  bufferMs: 100, // one press during cooldown / guard hold is kept
   swingVariants: 3,
 };
 

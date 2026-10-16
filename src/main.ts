@@ -4,7 +4,7 @@ import { BALANCE, DANGER_Y, GROUND_Y } from './config/balance';
 import { CAMERA_FEEL, COMBO_TIERS, DEBRIS_FEEL } from './config/gameFeel';
 import { LANDMARKS, landmarkById } from './config/landmarks';
 import { buildingRng, pickLandmark } from './core/building';
-import { guardPlaneY, newRun, pause, resume, startRun, takeEvents, tick, tierOf, type GameEvent, type RunState } from './core/game';
+import { attackSurfaceY, guardPlaneY, heroLanePos, newRun, pause, resume, startRun, takeEvents, tick, tierOf, type GameEvent, type RunState } from './core/game';
 import { loadSave, recordRun, writeSave } from './core/persistence';
 import { applyDom, lang, LANG_LABEL, LANGS, onLangChange, setLang, t, type Lang } from './i18n';
 import { Input } from './input';
@@ -20,6 +20,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const STEP = 1 / 60;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const debugFeel = new URLSearchParams(location.search).has('debugFeel');
+const debugContact = new URLSearchParams(location.search).has('debugContact');
 
 const save = loadSave();
 const audio = new AudioManager();
@@ -178,7 +179,7 @@ function floorWorldRect(bottomY: number, height: number) {
 
 function onEvent(e: GameEvent) {
   const p = state.player;
-  const lx = renderer.laneX(p.lane);
+  const lx = renderer.laneX(heroLanePos(p)); // where the hero is actually drawn (mid-slide included)
   const b = state.building;
   const material = landmarkById(b?.landmarkId ?? bgLandmark).material;
   if (debugFeel) { eventLog.unshift(`${(state.timeMs / 1000).toFixed(2)} ${e.t} g=${state.guardPhase} b=${b ? b.bottomY.toFixed(1) : '-'} gap=${b ? (guardPlaneY(state) - b.bottomY).toFixed(1) : '-'} y=${p.y.toFixed(0)}`); eventLog.length = Math.min(eventLog.length, 10); }
@@ -194,25 +195,26 @@ function onEvent(e: GameEvent) {
       if (e.fromHeight > 120) kick(CAMERA_FEEL.land);
       break;
     case 'swing': {
-      // the slash arc starts on the same tick as the hit judgement
-      const head = GROUND_Y - BALANCE.heroHeight - p.y;
-      fx.slash(lx, head, e.variant, p.facing, state.combo);
+      // the slash is drawn at once, hit or not; only a confirmed 'hit' adds sparks, cracks and shake
+      fx.slash(lx, attackSurfaceY(state) + 10, e.variant, p.facing, state.combo);
       audio.play('swing');
       break;
     }
     case 'whiff': break;
     case 'hit': {
-      const by = state.building?.bottomY ?? e.floor.height;
-      const head = GROUND_Y - BALANCE.heroHeight - p.y;
-      fx.streak(lx, Math.min(by, head), head, 'rgba(220,240,255,.95)', 9, 0.06);
+      // everything lands on the real blade-to-underside contact point
+      const by = e.contact.y;
+      const cx = renderer.laneX(e.contact.lanePos);
+      fx.streak(cx, by, by + 14, 'rgba(220,240,255,.95)', 9, 0.06);
+      fx.sparks(cx, by, 4, ['#ffffff', '#fff3b0']);
       audio.play('hit', { pitch: 1 + Math.min(state.combo, 40) * 0.012 });
       if (e.hpLeft > 0) {
         const fv = visual?.floors.get(e.floor.id);
-        fx.damage(lx, by, e.hpLeft, fv?.color ?? '#999', material);
+        fx.damage(cx, by, e.hpLeft, fv?.color ?? '#999', material);
         audio.play(e.hpLeft === 1 ? 'crack' : 'stone', { pitch: e.hpLeft === 1 ? 1.2 : 1.6 });
         kick(e.hpBefore === 2 ? CAMERA_FEEL.heavyHit : CAMERA_FEEL.hit, p.facing * -0.6, 1);
       } else kick(CAMERA_FEEL.hit, p.facing * -0.6, 1);
-      fx.pop(lx + 30, by - 4, `+${e.score}`, 14, '#d6ecff');
+      fx.pop(cx + 30, by - 4, `+${e.score}`, 14, '#d6ecff');
       if (e.counter) banners.offer('COUNTER!', P.CLUTCH - 0.5, '#8ff0ff', 28);
       break;
     }
@@ -242,17 +244,19 @@ function onEvent(e: GameEvent) {
       break;
     }
     case 'guardContact': {
-      // spark burst exactly at the contact point between the sword and the underside
-      fx.sparks(lx, e.planeY, 9, ['#ffffff', '#bff3ff', '#8ff0ff']);
-      fx.ring(lx, e.planeY, 40, '#bff3ff', 0.18, 5, 0.35);
-      audio.play(e.kind === 'ground' ? 'guardThud' : 'guardClang');
-      kick(e.kind === 'ground' ? CAMERA_FEEL.guardGround : CAMERA_FEEL.guardAir, 0, 1);
+      // v3 §7: one heavy THUD at the exact contact point; strength (visual only) scales with the impact speed
+      const n = Math.max(0, Math.min(1, (e.impactSpeed - 100) / 600));
+      fx.sparks(lx, e.planeY, Math.round(5 + 5 * n), ['#ffffff', '#bff3ff', '#8ff0ff']);
+      fx.ring(lx, e.planeY, 40, '#bff3ff', 0.12, 5, 0.35);
+      fx.smoke(lx, e.planeY, e.kind === 'ground' ? 5 : 3, 'rgba(232,222,204,', 0.7);
+      audio.play(e.kind === 'ground' ? 'guardThud' : 'guardClang', { pitch: 1 - 0.08 * n });
+      camera.kick(2.5 + 1.5 * n, e.kind === 'ground' ? CAMERA_FEEL.guardGround.ms : CAMERA_FEEL.guardAir.ms, 0, 1);
       if (state.lives === 1) banners.offer('CLUTCH!', P.CLUTCH, '#8ff0ff', 30);
       else banners.offer(e.kind === 'air' ? 'AIR GUARD · COMBO KEEP' : 'GUARD!', P.NORMAL, '#8ff0ff', e.kind === 'air' ? 22 : 26, 0.6);
       break;
     }
     case 'guardRepel': {
-      const y = guardPlaneY(state);
+      const y = state.guardContact?.contactY ?? guardPlaneY(state);
       audio.play('repel');
       fx.ring(lx, y, e.kind === 'ground' ? 120 : 70, 'rgba(191,243,255,.9)', 0.3, e.kind === 'ground' ? 8 : 5, 0.3);
       fx.smoke(lx, state.building?.bottomY ?? y, e.kind === 'ground' ? 6 : 3, 'rgba(232,222,204,', 0.9);
@@ -360,7 +364,7 @@ function frame(now: number) {
 
   const b = state.building;
   const fxState: FrameFx = {
-    camera, banners, recoil: effects.recoil, danger: effects.danger, debug: debugFeel,
+    camera, banners, recoil: effects.recoil, danger: effects.danger, debug: debugFeel, debugContact,
     flash: effects.flash, redFlash: effects.red, cutin: effects.cutin, reducedMotion: reducedMotion || save.effectsLow,
     countdown: state.phase === 'COUNTDOWN' ? state.countdown : null,
     waveCard: state.phase === 'WAVE_TRANSITION' && b ? {

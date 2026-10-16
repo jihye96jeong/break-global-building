@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BALANCE, DANGER_Y } from '../src/config/balance';
+import { DANGER_Y } from '../src/config/balance';
 import { attack, newRun, NO_INPUT, pause, resume, special, startRun, takeEvents, tick } from '../src/core/game';
 import { building, floor, playing } from './helpers';
 
@@ -7,10 +7,11 @@ const DT = 1 / 60;
 const tall = (n: number) => Array.from({ length: n }, (_, i) => floor([3, 3, 3], i + 1));
 
 describe('combo, score, special (spec §7)', () => {
-  it('T10 ten hits → combo 10, score and special gauge go up', () => {
+  it('T10 holding Z under a building in contact: real hits build combo, score and special', () => {
     const s = playing(building(tall(10)));
-    for (let i = 0; i < 10; i++) { attack(s); tick(s, BALANCE.attackIntervalMs / 1000); }
-    expect(s.combo).toBe(10);
+    for (let t = 0; t < 2; t += DT) tick(s, DT, { ...NO_INPUT, attack: true, attackPressed: t === 0 });
+    expect(s.combo).toBeGreaterThanOrEqual(10);
+    expect(s.lives).toBe(3);
     expect(s.score).toBeGreaterThan(0);
     expect(s.special).toBeGreaterThan(0);
   });
@@ -19,6 +20,7 @@ describe('combo, score, special (spec §7)', () => {
     const s = playing(building([floor([1, 1, 1])]));
     s.building!.defeated = true;
     attack(s);
+    for (let i = 0; i < 6; i++) tick(s, DT);
     expect([s.combo, s.score, s.special]).toEqual([0, 0, 0]);
     expect(takeEvents(s).map((e) => e.t)).toContain('whiff');
   });

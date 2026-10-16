@@ -1,8 +1,8 @@
-// v2.0 game-feel acceptance tests (GF-xx). World units, 60 Hz fixed step.
+// v2.0 game-feel acceptance tests (GF-xx), updated to the v3.0 contact values. World units, 60 Hz fixed step.
 import { describe, expect, it } from 'vitest';
-import { BALANCE, DANGER_Y, GROUND_Y } from '../src/config/balance';
+import { BALANCE, DANGER_Y } from '../src/config/balance';
 import { GUARD_FEEL, HITSTOP_MS, JUMP_FEEL } from '../src/config/gameFeel';
-import { attack, guardPlaneY, NO_INPUT, special, takeEvents, tick, type Intents, type RunState } from '../src/core/game';
+import { attack, attackSurfaceY, guardPlaneY, NO_INPUT, special, takeEvents, tick, type Intents, type RunState } from '../src/core/game';
 import { building, floor, playing } from './helpers';
 
 const DT = 1 / 60;
@@ -42,14 +42,16 @@ describe('jump (v2 §3)', () => {
     expect(hop.landAt).toBeLessThan(full.landAt);
   });
 
-  it('GF-04 attacks keep landing while airborne, without forcing the hero down', () => {
-    const s = playing(building(tall(10), 150));
+  it('GF-04 a jump attack lands when the rising blade actually reaches the underside', () => {
+    const s = playing(building(tall(10), 300)); // contact at feet height 156, inside the jump
     s.building!.velocityY = 0; s.building!.baseSpeed = 0;
     tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true });
     let hits = 0;
-    for (let i = 0; i < 25; i++) { tick(s, DT, { ...NO_INPUT, jump: true, attack: true }); hits += takeEvents(s).filter((e) => e.t === 'hit').length; }
-    expect(hits).toBeGreaterThanOrEqual(3);
-    expect(s.player.y).toBeGreaterThan(80);
+    for (let i = 0; i < 25; i++) {
+      tick(s, DT, { ...NO_INPUT, jump: true, attack: true });
+      for (const e of takeEvents(s)) if (e.t === 'hit') { hits++; expect(e.contact.gap).toBeLessThanOrEqual(2); expect(s.player.y).toBeGreaterThan(80); }
+    }
+    expect(hits).toBeGreaterThanOrEqual(1);
   });
 
   it('a jump buffered just before landing still fires', () => {
@@ -65,7 +67,7 @@ describe('jump (v2 §3)', () => {
   it('the hero can never jump into the building: its underside is a ceiling', () => {
     const s = open(300);
     tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true });
-    run(s, 0.6, { jump: true }, (st) => expect(GROUND_Y - BALANCE.heroHeight - st.player.y).toBeGreaterThanOrEqual(st.building!.bottomY - 0.001));
+    run(s, 0.6, { jump: true }, (st) => expect(attackSurfaceY(st)).toBeGreaterThanOrEqual(st.building!.bottomY - 0.001));
   });
 });
 
@@ -107,30 +109,36 @@ describe('guard contact (v2 §4)', () => {
     expect(ms).toBeLessThanOrEqual(150);
   });
 
-  it('GF-08 a ground guard then pushes the building up 85 wu smoothly (never the old one-tick 85 wu jump)', () => {
+  it('GF-08 a ground guard then pushes the building up 36 wu smoothly (v3; never a one-tick jump)', () => {
     const { log } = guardRun(10);
     const start = log.filter((l) => l.phase === 'HOLD').pop()!.bottom;
     const repel = log.filter((l) => l.phase === 'REPEL' || l.phase === 'RELEASE');
     const top = Math.min(...repel.map((l) => l.bottom));
-    expect(start - top).toBeGreaterThan(84);
-    expect(start - top).toBeLessThan(86.5);
-    for (let i = 1; i < log.length; i++) expect(Math.abs(log[i].bottom - log[i - 1].bottom)).toBeLessThan(25);
+    expect(start - top).toBeGreaterThan(35.5);
+    expect(start - top).toBeLessThan(36.5);
+    for (let i = 1; i < log.length; i++) expect(Math.abs(log[i].bottom - log[i - 1].bottom)).toBeLessThan(10);
     const repelMs = log.filter((l) => l.phase === 'REPEL').length * DT * 1000;
-    expect(repelMs).toBeGreaterThan(180); expect(repelMs).toBeLessThan(240);
+    expect(repelMs).toBeGreaterThan(150); expect(repelMs).toBeLessThan(190);
   });
 
-  it('GF-09 an air guard (jumping up into the building) pushes 35 wu over ~160 ms', () => {
+  it('GF-09 an air guard (jumping up into the building) pushes 18 wu (v3)', () => {
     const s = playing(building(tall(6), 300));
     const b = s.building!; b.velocityY = 0; b.baseSpeed = 0;
     const log: { bottom: number; phase: string }[] = [];
-    tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true, guard: true, guardPressed: true });
-    for (let i = 0; i < 70; i++) { tick(s, DT, { ...NO_INPUT, jump: true, guard: i < 20 }); log.push({ bottom: b.bottomY, phase: s.guardPhase }); }
+    tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true });
+    let pressed = false;
+    for (let i = 0; i < 70; i++) {
+      const near = !pressed && guardPlaneY(s) - b.bottomY < 30; // press ↓ just before the blade meets the underside
+      if (near) pressed = true;
+      tick(s, DT, { ...NO_INPUT, jump: true, guard: pressed && i < 40, guardPressed: near });
+      log.push({ bottom: b.bottomY, phase: s.guardPhase });
+    }
     expect(log.some((l) => l.phase === 'HOLD')).toBe(true);
     expect(takeEvents(s).some((e) => e.t === 'guardContact' && e.kind === 'air')).toBe(true);
     const start = log.filter((l) => l.phase === 'HOLD').pop()!.bottom;
     const top = Math.min(...log.filter((l) => l.phase !== 'HOLD').slice(-60).map((l) => l.bottom));
-    expect(start - top).toBeGreaterThan(33);
-    expect(start - top).toBeLessThan(37);
+    expect(start - top).toBeGreaterThan(17);
+    expect(start - top).toBeLessThan(19);
     expect(s.guardContacts).toBe(1);
   });
 
@@ -185,17 +193,15 @@ describe('guard contact (v2 §4)', () => {
     expect(ev.filter((e) => e.t === 'guardContact').length).toBeLessThanOrEqual(1);
   });
 
-  it('GF-30 a floor cut during the push lifts the underside by the floor height on top of the push', () => {
+  it('GF-30 (v3 §5.7) mashing Z while the guard braces or pushes never damages the building', () => {
     const s = playing(building(tall(6, [1, 1, 1]), 0));
     const b = s.building!;
-    b.bottomY = guardPlaneY(s) - 5;
-    run(s, 0.15, { guard: true, guardPressed: true });
-    while (s.guardPhase === 'HOLD') tick(s, DT, { ...NO_INPUT, guard: true });
-    expect(s.guardPhase).toBe('REPEL');
-    const before = b.bottomY, floors = b.floors.length;
-    tick(s, DT, { ...NO_INPUT, attack: true, attackPressed: true });
-    expect(b.floors.length).toBe(floors - 1);
-    expect(before - b.bottomY).toBeGreaterThan(40); // floor (40) + push
+    b.bottomY = guardPlaneY(s) - 1;
+    tick(s, DT, { ...NO_INPUT, guard: true, guardPressed: true });
+    expect(s.guardPhase).toBe('HOLD');
+    const floors = b.floors.length;
+    for (let i = 0; i < 18 && (s.guardPhase === 'HOLD' || s.guardPhase === 'REPEL'); i++) tick(s, DT, { ...NO_INPUT, attack: true, attackPressed: i % 2 === 0 });
+    expect(b.floors.length).toBe(floors);
   });
 });
 
@@ -233,7 +239,7 @@ describe('destruction & hit-stop (v2 §5–§6)', () => {
   });
 
   it('GF-22 hit-stop freezes gameplay only: the building does not fall, the attack rhythm keeps time', () => {
-    const s = playing(building(tall(6, [2, 2, 2]), 200));
+    const s = playing(building(tall(6, [2, 2, 2])));
     attack(s);
     expect(s.freezeMs).toBe(HITSTOP_MS.hit);
     const y = s.building!.bottomY;
@@ -256,9 +262,10 @@ describe('destruction & hit-stop (v2 §5–§6)', () => {
     expect(snaps.size).toBe(1);
   });
 
-  it('feel values match the v2 targets', () => {
+  it('feel values match the v2 jump and v3 guard targets', () => {
     expect(JUMP_FEEL.jumpVelocity ** 2 / (2 * JUMP_FEEL.gravityAscending)).toBeCloseTo(203.8, 0);
-    expect(GUARD_FEEL.holdMs.ground).toBe(120);
+    expect(GUARD_FEEL.holdMs).toEqual({ ground: 120, air: 100 });
+    expect(GUARD_FEEL.repelUnits).toEqual({ ground: 36, air: 18 });
     expect(BALANCE.attackIntervalMs).toBe(95);
   });
 });

@@ -1,6 +1,6 @@
 // The hero: a deliberately simple blue stick figure with a sword, drawn in code.
 import { BALANCE, GROUND_Y } from '../config/balance';
-import { GUARD_FEEL } from '../config/gameFeel';
+import { CONTACT, GUARD_FEEL } from '../config/gameFeel';
 import { imageNow } from './assets';
 
 /** xAI-generated ninja poses (development time, static files). The stick figure below is the fallback. */
@@ -13,7 +13,7 @@ export const NINJA_SPRITES = {
 };
 const NINJA_H = 96; // world units, giant sword included
 const GUARD_REACH = GUARD_FEEL.guardReachAboveHead;
-const GUARD_COMPRESS = GUARD_FEEL.braceCompression;
+const ATTACK_REACH = CONTACT.attackReachAboveHead;
 
 const BLUE = '#2f6bff';
 const INK = '#14123a';
@@ -34,13 +34,18 @@ function drawNinja(g: CanvasRenderingContext2D, p: HeroPose, lift: number): bool
   const pose = p.hurt ? 'hurt' : p.guarding ? 'guard' : p.attackK >= 0 || p.special > 0 ? 'attack' : p.air ? 'jump' : 'idle';
   const img = imageNow(NINJA_SPRITES[pose]);
   if (!img) return false;
-  // guard: the raised blade is the contact plane (hero height + reach), squeezed while bracing
-  let h = pose === 'attack' ? NINJA_H * 1.12 : pose === 'guard' ? BALANCE.heroHeight + GUARD_REACH : NINJA_H;
+  // v3: attack and guard poses are drawn so their top edge (the blade) is exactly the judged contact surface
+  let h = pose === 'attack' ? BALANCE.heroHeight + ATTACK_REACH : pose === 'guard' ? BALANCE.heroHeight + GUARD_REACH : NINJA_H;
+  const contactPose = pose === 'attack' || pose === 'guard';
   let sx = 1, sy = 1;
-  if (pose === 'guard' && p.guardPhase === 'HOLD') sy = (h - GUARD_COMPRESS * Math.min(1, p.guardK * 3)) / h;
-  if (pose === 'guard' && p.guardPhase === 'REPEL') sy = 1 + 0.06 * Math.sin(p.guardK * Math.PI);
-  if (p.landK > 0) { sy *= 1 - 0.15 * p.landK; sx *= 1 + 0.1 * p.landK; } // landing squash
-  if (p.rising && pose !== 'attack') { sy *= 1.08; sx *= 0.94; } // take-off stretch
+  // bracing: the knees give (legs squash) while the blade stays pinned to the underside
+  let crouch = 0;
+  if (pose === 'guard' && p.guardPhase === 'HOLD') crouch = (p.air ? GUARD_FEEL.braceCompression.air : GUARD_FEEL.braceCompression.ground) * Math.min(1, p.guardK * 3.4);
+  if (pose === 'guard' && p.guardPhase === 'REPEL') crouch = -3 * Math.sin(p.guardK * Math.PI); // legs drive up
+  if (!contactPose) {
+    if (p.landK > 0) { sy *= 1 - 0.15 * p.landK; sx *= 1 + 0.1 * p.landK; } // landing squash
+    if (p.rising) { sy *= 1.08; sx *= 0.94; } // take-off stretch
+  }
   // never draw into the building above: squeeze to fit the gap
   if (p.ceiling < h * sy) sy = Math.max(0.55, p.ceiling / h);
   h *= sy;
@@ -50,9 +55,14 @@ function drawNinja(g: CanvasRenderingContext2D, p: HeroPose, lift: number): bool
   g.translate(p.x, GROUND_Y - lift + bob);
   g.scale(p.facing, 1);
   if (pose === 'idle' && p.moving) g.rotate(0.08);
-  if (pose === 'attack' && p.attackK >= 0) g.rotate((p.variant === 1 ? -1 : 1) * 0.12 * Math.sin(p.attackK * Math.PI));
-  if (pose === 'guard' && p.guardPhase === 'HOLD') g.translate(Math.sin(p.time * 0.9) * 0.8, 0); // straining
-  g.drawImage(img, -w / 2, -h, w, h);
+  if (pose === 'guard' && p.guardPhase === 'HOLD') g.translate(Math.sin(p.time * 0.9) * 0.6, 0); // straining (sideways only)
+  if (crouch !== 0) {
+    // two slices: legs (lower 45%) absorb the crouch, torso + arms + blade keep the top edge on the contact line
+    const iw = img.naturalWidth, ih = img.naturalHeight, cut = 0.55;
+    const upperH = h * cut + crouch, lowerH = h * (1 - cut) - crouch;
+    g.drawImage(img, 0, 0, iw, ih * cut, -w / 2, -h, w, upperH);
+    g.drawImage(img, 0, ih * cut, iw, ih * (1 - cut), -w / 2, -h + upperH, w * (1 + crouch * 0.01), lowerH);
+  } else g.drawImage(img, -w / 2, -h, w, h);
   g.restore();
   return true;
 }

@@ -1,11 +1,17 @@
 import type { FallingBuilding, Floor, HP } from '../src/core/building';
+import { BALANCE, GROUND_Y } from '../src/config/balance';
+import { CONTACT } from '../src/config/gameFeel';
 import { newRun, type RunState } from '../src/core/game';
 
 export function floor(hp: [HP, HP, HP], ordinal = 1, height = 40): Floor {
   return { id: `f${ordinal}-${Math.random()}`, ordinal, hp: [...hp] as [HP, HP, HP], initialHp: hp as [1 | 2 | 3, 1 | 2 | 3, 1 | 2 | 3], height, v0: 0, v1: 1, segment: 's' };
 }
 
-export function building(floors: Floor[], bottomY = 200): FallingBuilding {
+/** Underside y where a grounded hero's attack blade exactly touches it (v3 contact surface). */
+export const CONTACT_Y = GROUND_Y - BALANCE.heroHeight - CONTACT.attackReachAboveHead;
+
+/** A building; by default its underside rests exactly on a grounded hero's blade (gap 0). */
+export function building(floors: Floor[], bottomY = CONTACT_Y): FallingBuilding {
   return { id: 'test', index: 1, landmarkId: 'gyeongbokgung', floors, originalFloorCount: floors.length, totalHeight: floors.reduce((a, f) => a + f.height, 0), bottomY,
     baseSpeed: 115, velocityY: 115, tier: 1, elite: false, defeated: false };
 }
