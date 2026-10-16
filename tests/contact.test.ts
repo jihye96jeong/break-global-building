@@ -100,7 +100,7 @@ describe('CT — a normal attack damages only on real contact', () => {
     const gapAfter = attackSurfaceY(s) - s.building!.bottomY;
     expect(gapAfter).toBeGreaterThanOrEqual(28);
     let lastGap = gapAfter, firstHitAt = -1;
-    for (let i = 0; i < 60 && firstHitAt < 0; i++) {
+    for (let i = 0; i < 120 && firstHitAt < 0; i++) {
       const ev = step(s, { attack: true, attackPressed: true });
       for (const e of ev) if (e.t === 'hit') { firstHitAt = i; expect(e.contact.gap).toBeLessThanOrEqual(CONTACT.touchEpsilonWu); }
       if (firstHitAt < 0) lastGap = attackSurfaceY(s) - s.building!.bottomY;
@@ -363,7 +363,7 @@ describe('FLOW — after a break the building pops up a little and the hero land
     while (s.player.y > 0 && t < 1) { step(s, { attack: true }); top = Math.min(top, b.bottomY); t += DT; }
     expect(afterBreak).toBeLessThan(before);
     expect(afterBreak - top).toBeGreaterThan(5); // the little extra pop
-    expect(afterBreak - top).toBeLessThan(14);
+    expect(afterBreak - top).toBeLessThan(20); // floats up ~14 wu, then comes down slowly
     expect(t).toBeLessThan(0.45); // landed quickly, even with Z held
     expect(s.player.y).toBe(0);
   });
@@ -493,7 +493,7 @@ describe('VIS — judgement is independent of frame rate, camera and screen size
     const s = playing(building(tall(12, [2, 2, 2], 30), 300));
     s.building!.baseSpeed = 115 * mult; s.building!.velocityY = s.building!.baseSpeed; s.building!.pressure = 0;
     let hits = 0, floors = 0;
-    for (let t = 0; t < 3 && s.phase === 'PLAYING'; t += 1 / hz) {
+    for (let t = 0; t < 5 && s.phase === 'PLAYING'; t += 1 / hz) {
       const ev = step(s, { attack: true }, 1 / hz);
       hits += count(ev, 'hit'); floors += count(ev, 'floor');
     }
@@ -521,7 +521,7 @@ describe('VIS — judgement is independent of frame rate, camera and screen size
         for (const e of ev) if (e.t === 'hit') expect(e.contact.gap).toBeLessThanOrEqual(2);
       }
       expect(lost).toBe(0);
-      expect(hits).toBeGreaterThan(15);
+      expect(hits).toBeGreaterThan(8);
     }
   });
 

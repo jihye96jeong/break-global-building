@@ -463,7 +463,7 @@ function applyHit(s: RunState, proof: ContactProof, variant: number) {
   } else {
     b.pressMs = 0; // the next floor drops in at full speed, not at the creep
     b.settleMs = CONTACT.postBreakSettleMs;
-    b.velocityY = -CONTACT.breakPopVelocity; // what is left jumps up a little, then comes back down
+    b.velocityY = -CONTACT.breakPopVelocity; // what is left floats up a little, then comes down slowly
     dropToGround(s); // and the hero lands right away
     freeze(s, HITSTOP_MS.floor);
   }
@@ -723,10 +723,9 @@ function updateFall(s: RunState, dt: number) {
     return;
   }
   if (b.settleMs && b.settleMs > 0) {
+    // after a floor break: float up, then a slow descent for a while
     b.settleMs = Math.max(0, b.settleMs - dt * 1000);
-    const [g0, g1] = CONTACT.settleEaseGap;
-    const k = Math.max(0, Math.min(1, (attackSurfaceY(s) - b.bottomY - g0) / (g1 - g0)));
-    target = Math.max(target, lerp(b.baseSpeed, CONTACT.postBreakSettleSpeed, k));
+    target = Math.max(CONTACT.postBreakSlowMin, b.baseSpeed * CONTACT.postBreakSlowFactor);
     accel = CONTACT.postBreakSettleAccel;
   }
   b.velocityY = Math.min(target, b.velocityY + accel * dt);

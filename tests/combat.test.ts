@@ -9,7 +9,7 @@ const tall = (n: number) => Array.from({ length: n }, (_, i) => floor([3, 3, 3],
 describe('combo, score, special (spec §7)', () => {
   it('T10 holding Z under a building in contact: real hits build combo, score and special', () => {
     const s = playing(building(tall(10)));
-    for (let t = 0; t < 2; t += DT) tick(s, DT, { ...NO_INPUT, attack: true, attackPressed: t === 0 });
+    for (let t = 0; t < 4; t += DT) tick(s, DT, { ...NO_INPUT, attack: true, attackPressed: t === 0 });
     expect(s.combo).toBeGreaterThanOrEqual(10);
     expect(s.lives).toBe(3);
     expect(s.score).toBeGreaterThan(0);

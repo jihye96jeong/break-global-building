@@ -33,11 +33,13 @@ export const CONTACT = {
   pressureFromSpeed: 190, // at or below this fall speed a hit holds the building still…
   pressureFactor: 0.28, // …above it, endless creeps down at (speed − 190) × this (story levels set their own, 0 → 130 wu/s)
   pressureHoldMs: 150, // the creep lasts this long after a hit; with no new hit the building speeds back up
-  postBreakSettleSpeed: 400, // wu/s: the next floor drops fast onto the blade after a floor break…
-  postBreakSettleMs: 140,
-  breakPopVelocity: 320, // wu/s up: after a floor breaks the rest of the building pops up ~8 wu before settling down again
-  postBreakSettleAccel: 6000,
-  settleEaseGap: [6, 26] as [number, number], // …easing back to normal speed over the last 26 → 6 wu
+  // after a floor breaks: what is left floats up (~14 wu), then comes down SLOWLY for a while so the hero, who has
+  // just landed, has time to set up the next cut; only then does it speed back up to the level's fall speed
+  breakPopVelocity: 205, // wu/s up
+  postBreakSettleAccel: 1500, // wu/s²: gentle float up and turn-around
+  postBreakSlowFactor: 0.45, // the slow descent is this share of the fall speed…
+  postBreakSlowMin: 80, // …but at least this (wu/s)
+  postBreakSettleMs: 900, // how long the slow descent lasts
 };
 
 export const GUARD_FEEL = {

@@ -101,13 +101,15 @@ export class Renderer {
       for (let i = -2; i <= 2; i++) { const xx = x + i * 14, yy = GROUND_Y - BALANCE.heroHeight - p.y - 10 - Math.abs(i) * 3; g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx + i * 3, yy - 10); g.stroke(); }
     }
     // night levels: a soft light pool keeps the dark ninja readable against the dark city (render only)
-    if (f.story && f.story.stage.level >= 6 && s.phase !== 'BURIED') {
+    if (f.story && f.story.stage.level >= 6 && s.phase !== 'BURIED' && s.phase !== 'ESCAPE') {
       const hy = GROUND_Y - p.y - BALANCE.heroHeight / 2;
       const lg = g.createRadialGradient(x, hy, 4, x, hy, 70);
       lg.addColorStop(0, 'rgba(190,225,255,.42)'); lg.addColorStop(0.55, 'rgba(150,200,255,.16)'); lg.addColorStop(1, 'rgba(150,200,255,0)');
       g.fillStyle = lg; g.fillRect(x - 70, hy - 70, 140, 140);
     }
-    if (s.phase !== 'BURIED') drawHero(g, { // buried: the hero is completely under the building
+    // buried — and while breaking out, until the building has risen clear of the head — the hero stays hidden under it
+    const underRubble = s.phase === 'BURIED' || (s.phase === 'ESCAPE' && !!b && b.bottomY > headY(s) - 2);
+    if (!underRubble) drawHero(g, {
       x, y: p.y, facing: p.facing,
       attackK: p.attackAnimMs > 0 ? 1 - p.attackAnimMs / BALANCE.attackAnimMs : -1,
       variant: (p.swingCount + 2) % 3,
