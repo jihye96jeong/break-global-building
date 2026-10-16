@@ -24,7 +24,7 @@ export const BALANCE = {
   heroHeight: HERO_HEIGHT,
 
   // falling building
-  hitPushUp: 4, // v4: a small, non-cumulative kick per hit (the building stops, then falls back onto the blade)
+  hitPushUp: 0, // v5: no kick; a struck building creeps down at the level's pressure speed (CONTACT.pressure*)
   fallCapFactor: 1.12, // speed never exceeds base * tier * this
   waveGapMs: 450, // name card between the first buildings…
   waveGapFastMs: 300, // …then a short 0.25–0.40 s handover (v4 §4.4)

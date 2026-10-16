@@ -263,13 +263,22 @@ export function laneOverlap(pos: number, lane: number) {
  * Swept contact between a pose surface and the underside across one tick. gap = surface − underside
  * (> 0 apart, 0 touching, < 0 overlapping). Returns the time of impact in [0,1], or null if they never touched.
  */
-export function sweptContact(prevGap: number, currGap: number): number | null {
-  const eps = CONTACT.touchEpsilonWu, pen = CONTACT.maxPenetrationWu;
+export function sweptContact(prevGap: number, currGap: number, pen: number = CONTACT.maxPenetrationWu): number | null {
+  const eps = CONTACT.touchEpsilonWu;
   if (prevGap < -pen) return null; // already deep inside before this tick: never retroactive
   if (prevGap <= eps) return 0; // touching at the start of the tick
   if (currGap > eps) return null; // still apart
   return Math.max(0, Math.min(1, prevGap / (prevGap - currGap)));
 }
+
+/** How deep the underside may press below the attack blade and still be struck: all the way down to the head. */
+const PRESS_ZONE = CONTACT.attackReachAboveHead;
+/**
+ * v5 difficulty: while being struck, a building creeps down at this speed — none at 190 wu/s (level 1), rising with
+ * the fall speed: ≈3 wu per hit at level 5, ≈8 wu per hit at level 10, where a 3-hit lane needs a guard or a move.
+ */
+export const pressureVelocity = (baseSpeed: number) => Math.max(0, (baseSpeed - CONTACT.pressureFromSpeed) * CONTACT.pressureFactor);
+const pressureOf = (b: FallingBuilding) => b.pressure ?? pressureVelocity(b.baseSpeed);
 
 /** Positions at the start of a tick, for the swept test. */
 interface Snapshot { bottom: number; attackY: number; guardY: number; lanePos: number; floorId: string }
@@ -367,7 +376,8 @@ function buildingCleared(s: RunState, b: FallingBuilding, aerial: boolean, emit 
 function startSwing(s: RunState, held: boolean) {
   const p = s.player;
   if (p.swing && !p.swing.consumed) s.events.push({ t: 'whiff', lane: p.lane, variant: p.swing.variant });
-  p.attackCooldownMs = BALANCE.attackIntervalMs;
+  // held: keep the exact rhythm (carry the overshoot); a fresh press starts a new rhythm
+  p.attackCooldownMs = BALANCE.attackIntervalMs + (held ? Math.min(0, p.attackCooldownMs) : 0);
   p.attackAnimMs = BALANCE.attackAnimMs;
   p.bufferedAttackMs = 0;
   const variant = p.swingCount++ % ATTACK_FEEL.swingVariants;
@@ -381,7 +391,6 @@ function startSwing(s: RunState, held: boolean) {
  */
 function resolveAttackContact(s: RunState, prev: Snapshot) {
   const p = s.player, sw = p.swing, b = s.building;
-  if (sw && sw.consumed && sw.held) { holdOnHeldBlade(s, prev); return false; }
   if (!sw || sw.consumed || sw.elapsedMs > sw.activeMs || bracing(s)) return false;
   if (s.phase !== 'PLAYING' || !b || b.defeated || b.collisionDisabled || !b.floors[0]) return false;
   const floor = b.floors[0];
@@ -389,7 +398,8 @@ function resolveAttackContact(s: RunState, prev: Snapshot) {
   const gapNow = surf - b.bottomY;
   // a floor that just replaced the broken one is a new contact: its old snapshot never counts
   const prevGap = prev.floorId === floor.id ? prev.attackY - prev.bottom : gapNow;
-  const toi = sweptContact(prevGap, gapNow);
+  // the building may be pressing the blade down anywhere from the blade line to the head: still a real strike
+  const toi = sweptContact(prevGap, gapNow, PRESS_ZONE);
   s.contact.attackGap = gapNow;
   s.contact.toi = toi;
   if (toi === null) return false;
@@ -400,7 +410,7 @@ function resolveAttackContact(s: RunState, prev: Snapshot) {
   // the strike happens at the contact instant: the underside never ends deeper than the blade
   const bottomAt = prev.floorId === floor.id ? lerp(prev.bottom, b.bottomY, toi) : b.bottomY;
   const surfAt = lerp(prev.attackY, surf, toi);
-  const contactY = Math.min(bottomAt, surfAt);
+  const contactY = bottomAt; // struck where it is: a building pressing the blade down is never pulled back up to it
   const gapAt = surfAt - bottomAt;
   b.bottomY = contactY;
   sw.consumed = true;
@@ -411,22 +421,6 @@ function resolveAttackContact(s: RunState, prev: Snapshot) {
   return true;
 }
 
-/**
- * Z held: between two swings of the 95 ms rhythm the raised blade physically supports a building that comes back
- * onto it (stopped exactly at the contact point — no damage, no score). The next swing then strikes on real contact,
- * so holding Z never loses a hit to frame timing. Tapping gets no support.
- */
-function holdOnHeldBlade(s: RunState, prev: Snapshot) {
-  const b = s.building, sw = s.player.swing!;
-  if (s.phase !== 'PLAYING' || !b || b.defeated || b.collisionDisabled || !b.floors[0] || sw.elapsedMs > sw.activeMs || bracing(s)) return;
-  if (prev.floorId !== b.floors[0].id) return;
-  const surf = attackSurfaceY(s);
-  const toi = sweptContact(prev.attackY - prev.bottom, surf - b.bottomY);
-  if (toi === null || surf - b.bottomY > 0) return;
-  b.bottomY = Math.min(lerp(prev.bottom, b.bottomY, toi), lerp(prev.attackY, surf, toi));
-  b.velocityY = 0;
-}
-
 function applyHit(s: RunState, proof: ContactProof, variant: number) {
   const p = s.player;
   const lane = p.lane;
@@ -434,7 +428,9 @@ function applyHit(s: RunState, proof: ContactProof, variant: number) {
   const hpBefore = b.floors[0]?.hp[lane] ?? 0;
   const r = hitFloor(b, lane);
   if (r.kind === 'none') return;
-  b.velocityY = 0; // the blow stops the building dead; it falls back onto the blade (CONTACT.fallAccel)
+  // the blow does not stop it: it keeps creeping down at the level's pressure speed while you keep hitting
+  b.velocityY = pressureOf(b);
+  b.pressMs = CONTACT.pressureHoldMs;
   s.contact.lastEvent = 'ATTACK_HIT';
   s.contact.contactId = proof.segmentId;
   const score = onSuccessfulHit(s);
@@ -454,6 +450,7 @@ function applyHit(s: RunState, proof: ContactProof, variant: number) {
     buildingCleared(s, b, aerial);
     afterBuilding(s);
   } else {
+    b.pressMs = 0; // the next floor drops in at full speed, not at the creep
     b.settleMs = CONTACT.postBreakSettleMs;
     freeze(s, HITSTOP_MS.floor);
   }
@@ -705,6 +702,13 @@ function updateFall(s: RunState, dt: number) {
   const b = s.building;
   if (!b || b.defeated || guardOwnsBuilding(s)) return;
   let target = b.baseSpeed, accel = CONTACT.fallAccel;
+  if (b.pressMs && b.pressMs > 0) {
+    // being struck: a steady creep (0 at level 1 … ~120 wu/s at level 10); stop hitting and it speeds back up
+    b.pressMs = Math.max(0, b.pressMs - dt * 1000);
+    b.velocityY = pressureOf(b);
+    b.bottomY += b.velocityY * dt;
+    return;
+  }
   if (b.settleMs && b.settleMs > 0) {
     b.settleMs = Math.max(0, b.settleMs - dt * 1000);
     const [g0, g1] = CONTACT.settleEaseGap;
@@ -818,11 +822,12 @@ function updateEscape(s: RunState, ms: number) {
 /** One fixed simulation step (dt seconds). Input is applied only while PLAYING. */
 export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
   if (s.phase === 'PAUSED' || s.phase === 'TITLE' || s.phase === 'GAME_OVER' || s.phase === 'BOOT') return;
-  const ms = dt * 1000;
+  let ms = dt * 1000;
   s.timeMs += ms;
   s.invulnMs = Math.max(0, s.invulnMs - ms);
   const p = s.player;
-  p.attackCooldownMs = Math.max(0, p.attackCooldownMs - ms); // the 95 ms rhythm keeps running through hit-stop
+  // the 95 ms rhythm keeps running through hit-stop; the overshoot carries into the next swing so it is exact at any tick rate
+  p.attackCooldownMs = Math.max(-BALANCE.attackIntervalMs, p.attackCooldownMs - ms);
   p.attackAnimMs = Math.max(0, p.attackAnimMs - ms);
   p.bufferedAttackMs = Math.max(0, p.bufferedAttackMs - ms);
 
@@ -873,13 +878,16 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
     case 'PLAYING': break;
   }
 
-  // hit-stop: gameplay (falling, physics, combo clock, contact) pauses; one attack press is buffered
+  // hit-stop: gameplay (falling, physics, combo clock, contact) pauses; one attack press is buffered.
+  // If it ends inside this tick, the rest of the tick is played, so its length is exact at any tick rate.
   if (s.freezeMs > 0) {
-    s.freezeMs = Math.max(0, s.freezeMs - ms);
     if (input.attackPressed) p.bufferedAttackMs = CONTACT.attackBufferMs;
     if (input.jumpPressed) p.jumpBufferMs = JUMP_FEEL.jumpBuffer * 1000;
     if (input.specialPressed) special(s);
-    return;
+    if (s.freezeMs >= ms - 1e-9 || s.phase !== 'PLAYING') { s.freezeMs = Math.max(0, s.freezeMs - ms); return; }
+    ms -= s.freezeMs;
+    dt = ms / 1000;
+    s.freezeMs = 0;
   }
 
   const prev = snapshot(s);

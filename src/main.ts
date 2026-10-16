@@ -46,7 +46,7 @@ state.phase = 'BOOT';
 
 let visual: BuildingVisual | null = null;
 let bgLandmark = LANDMARKS[0].id;
-const effects = { flash: 0, red: 0, cutin: 0, recoil: 0, recoilMs: 0, danger: 0, panY: 0, slashGlow: 0 };
+const effects = { flash: 0, red: 0, cutin: 0, recoil: 0, recoilMs: 0, recoilAmp: 0, recoilDur: 1, danger: 0, panY: 0, slashGlow: 0 };
 let keyGuideMs = 0; // v4: the in-game key row shows for 4 s at the start of a run, then fades
 const pendingBursts: { at: number; fn: () => void }[] = [];
 const eventLog: string[] = []; // debug panel only
@@ -256,6 +256,8 @@ function onEvent(e: GameEvent) {
       fx.streak(cx, by, by + 14, 'rgba(220,240,255,.95)', 9, 0.06);
       fx.sparks(cx, by, 4, ['#ffffff', '#fff3b0']);
       audio.play('hit', { pitch: 1 + Math.min(state.combo, 40) * 0.012 });
+      // a struck building jolts (render only: the judged position never jumps)
+      if (effects.recoilMs <= 0) { effects.recoilAmp = 2.5; effects.recoilMs = effects.recoilDur = 60; }
       if (e.hpLeft > 0) {
         const fv = visual?.floors.get(e.floor.id);
         fx.damage(cx, by, e.hpLeft, fv?.color ?? '#999', material);
@@ -275,7 +277,7 @@ function onEvent(e: GameEvent) {
       audio.play(material);
       audio.play('crumble');
       kick(CAMERA_FEEL.floor, (Math.random() - 0.5) * 0.8, 1);
-      effects.recoil = DEBRIS_FEEL.recoilUnits; effects.recoilMs = DEBRIS_FEEL.recoilMs; // render-only lift of what remains
+      effects.recoilAmp = DEBRIS_FEEL.recoilUnits; effects.recoilMs = effects.recoilDur = DEBRIS_FEEL.recoilMs; // render-only lift of what remains
       if (e.last && e.aerial) banners.offer('AERIAL FINISH!', P.FINISH, '#ffe066', 38);
       else if (e.chain >= 3) banners.offer(`CHAIN CUT! ×${e.chain}`, P.CHAIN, '#ffd28a', 30);
       else if (e.oneHit) banners.offer('ONE HIT BREAK!', P.NORMAL, '#fff6c2', 26);
@@ -462,7 +464,7 @@ function frame(now: number) {
     effects.red = Math.max(0, effects.red - dt * 2.5);
     effects.danger = Math.max(0, effects.danger - dt * 1.6);
     effects.recoilMs = Math.max(0, effects.recoilMs - dt * 1000);
-    effects.recoil = DEBRIS_FEEL.recoilUnits * Math.sin((effects.recoilMs / DEBRIS_FEEL.recoilMs) * Math.PI) * (effects.recoilMs > 0 ? 1 : 0);
+    effects.recoil = effects.recoilAmp * Math.sin((effects.recoilMs / effects.recoilDur) * Math.PI) * (effects.recoilMs > 0 ? 1 : 0);
     effects.cutin = Math.max(0, effects.cutin - dt * 3.2); // a brief band only: the slash itself is the show
     // the camera follows the special's slash up the building (and comes back during the return)
     const q = state.phase === 'SPECIAL' ? state.specialSeq : null;

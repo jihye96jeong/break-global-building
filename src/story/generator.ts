@@ -76,7 +76,7 @@ export function createStoryWave(stage: StoryStage, waveIndex: number, attemptSee
     id: tag, index: waveIndex + 1, landmarkId: id, floors, originalFloorCount: count,
     totalHeight: floors.reduce((a, f) => a + f.height, 0),
     bottomY: spawnBottom(speed, ttc), baseSpeed: speed, velocityY: speed,
-    tier: stage.level, elite: last && stage.finalIntro, defeated: false,
+    tier: stage.level, elite: last && stage.finalIntro, defeated: false, pressure: stage.pressure,
   };
 }
 

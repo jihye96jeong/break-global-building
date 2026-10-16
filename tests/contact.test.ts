@@ -43,8 +43,8 @@ describe('CT — a normal attack damages only on real contact', () => {
     });
   }
 
-  it('CT-05 underside 0–2 wu from the blade, right lane: HP −1 exactly', () => {
-    for (const gap of [0, 1, 2, -1, -3]) {
+  it('CT-05 underside touching or pressing the blade down (2 wu above … the head), right lane: HP −1 exactly', () => {
+    for (const gap of [0, 1, 2, -1, -3, -8, -12]) {
       const s = attackAt(gap);
       const before = s.building!.floors[0].hp[1];
       attack(s);
@@ -54,7 +54,7 @@ describe('CT — a normal attack damages only on real contact', () => {
       const h = hits[0];
       if (h.t === 'hit') { expect(h.contact.contactConfirmed).toBe(true); expect(h.contact.atExactContact).toBe(true); expect(h.contact.laneMatched).toBe(true); }
     }
-    const deep = attackAt(-4); // deeper than 3 wu: too late, no hit
+    const deep = attackAt(-13); // below the head: it has already crushed the hero, no hit
     attack(deep);
     expect(count(takeEvents(deep), 'hit')).toBe(0);
   });
@@ -109,14 +109,17 @@ describe('CT — a normal attack damages only on real contact', () => {
     expect(lastGap).toBeLessThan(28);
   });
 
-  it('CT-11 the 7 wu kick after a hit is a real gap: no more hits until it closes', () => {
-    const s = attackAt(0); // static: the gap never closes
-    attack(s);
-    takeEvents(s);
-    expect(attackSurfaceY(s) - s.building!.bottomY).toBeCloseTo(BALANCE.hitPushUp, 5);
-    let hits = 0;
-    for (let i = 0; i < 60; i++) hits += count(step(s, { attack: true, attackPressed: i % 2 === 0 }), 'hit');
-    expect(hits).toBe(0);
+  it('CT-11 a hit never moves the building up (no kick, no teleport); it keeps creeping at the level pressure', () => {
+    for (const pressure of [0, 80, 175]) {
+      const s = attackAt(0, [3, 3, 3], 400);
+      s.building!.pressure = pressure;
+      const y0 = s.building!.bottomY;
+      attack(s);
+      expect(s.building!.bottomY).toBe(y0);
+      expect(s.building!.velocityY).toBe(pressure);
+      let prev = s.building!.bottomY;
+      for (let i = 0; i < 6; i++) { step(s); expect(s.building!.bottomY).toBeGreaterThanOrEqual(prev); prev = s.building!.bottomY; }
+    }
   });
 
   it('CT-12 the special still clears the building from far away', () => {
@@ -138,7 +141,7 @@ describe('CT — a normal attack damages only on real contact', () => {
         const ev = step(s, { attack: rnd() < 0.7, attackPressed: rnd() < 0.3, leftPressed: rnd() < 0.03, rightPressed: rnd() < 0.03, jumpPressed: rnd() < 0.02, jump: rnd() < 0.5 });
         for (const e of ev) if (e.t === 'hit') {
           expect(e.contact.gap).toBeLessThanOrEqual(CONTACT.touchEpsilonWu);
-          expect(e.contact.gap).toBeGreaterThanOrEqual(-CONTACT.maxPenetrationWu);
+          expect(e.contact.gap).toBeGreaterThanOrEqual(-CONTACT.attackReachAboveHead); // pressing down, never below the head
           expect(laneOverlap(e.contact.lanePos, e.lane)).toBeGreaterThanOrEqual(CONTACT.minHorizontalOverlap);
         }
       }
@@ -444,7 +447,7 @@ describe('SP — v4 special sweep', () => {
 describe('VIS — judgement is independent of frame rate, camera and screen size', () => {
   function heldAttackRun(hz: number, mult: number) {
     const s = playing(building(tall(12, [2, 2, 2], 30), 300));
-    s.building!.baseSpeed = 115 * mult; s.building!.velocityY = s.building!.baseSpeed;
+    s.building!.baseSpeed = 115 * mult; s.building!.velocityY = s.building!.baseSpeed; s.building!.pressure = 0;
     let hits = 0, floors = 0;
     for (let t = 0; t < 3 && s.phase === 'PLAYING'; t += 1 / hz) {
       const ev = step(s, { attack: true }, 1 / hz);
@@ -453,18 +456,20 @@ describe('VIS — judgement is independent of frame rate, camera and screen size
     return { hits, floors, lives: s.lives };
   }
 
-  it('VIS-03 holding Z at 30 / 60 / 120 Hz and 1.0 / 1.7 / 2.4× speed: no skipped contact, no crush, same result ±1', () => {
+  it('VIS-03 holding Z at 30 / 60 / 120 Hz and 1.0 / 1.7 / 2.4× speed: no skipped contact, no crush, same result ±2 floors in 3 s', () => {
+    // (the game itself always simulates at a fixed 60 Hz; this checks the rules are not fragile to the step size —
+    //  the remaining ±2 is only whether a fresh floor lands just before or just after a swing starts)
     for (const mult of [1, 1.7, 2.4]) {
       const r = [30, 60, 120].map((hz) => heldAttackRun(hz, mult));
       for (const x of r) { expect(x.lives).toBe(3); expect(x.hits).toBeGreaterThan(8); }
-      expect(Math.max(...r.map((x) => x.floors)) - Math.min(...r.map((x) => x.floors))).toBeLessThanOrEqual(1);
+      expect(Math.max(...r.map((x) => x.floors)) - Math.min(...r.map((x) => x.floors))).toBeLessThanOrEqual(2);
     }
   });
 
-  it('VIS-03 v4 speeds 190–650 wu/s at 30 / 60 / 120 / 144 Hz: holding Z never loses a hit to frame timing', () => {
+  it('VIS-03 speeds 190–650 wu/s at 30 / 60 / 120 / 144 Hz with no pressure: holding Z never loses a hit to frame timing', () => {
     for (const sp of [190, 240, 300, 390, 490, 600, 650]) for (const hz of [30, 60, 120, 144]) {
       const s = playing(building(Array.from({ length: 14 }, (_, i) => floor([2, 3, 2], i + 1, 22 + (i % 3) * 9)), 100));
-      s.building!.baseSpeed = sp; s.building!.velocityY = sp;
+      s.building!.baseSpeed = sp; s.building!.velocityY = sp; s.building!.pressure = 0;
       let lost = 0, hits = 0;
       for (let t = 0; t < 5 && s.phase === 'PLAYING'; t += 1 / hz) {
         const ev = step(s, { attack: true }, 1 / hz);

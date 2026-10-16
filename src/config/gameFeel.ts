@@ -28,7 +28,10 @@ export const CONTACT = {
   attackActiveMs: 55, // a tapped swing can connect during this window only
   heldActiveMs: 95, // auto-repeat while Z is held: the blade stays live until the next swing (no dead gaps)
   attackBufferMs: 70,
-  fallAccel: 3000, // wu/s²: a struck building stops dead, then falls back onto the blade
+  fallAccel: 3000, // wu/s²: after a hit the building accelerates back to its fall speed
+  pressureFromSpeed: 190, // at or below this fall speed a hit holds the building still…
+  pressureFactor: 0.28, // …above it, endless creeps down at (speed − 190) × this (story levels set their own, 0 → 130 wu/s)
+  pressureHoldMs: 150, // the creep lasts this long after a hit; with no new hit the building speeds back up
   postBreakSettleSpeed: 400, // wu/s: the next floor drops fast onto the blade after a floor break…
   postBreakSettleMs: 140,
   postBreakSettleAccel: 6000,
