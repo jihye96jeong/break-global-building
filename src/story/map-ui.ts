@@ -12,6 +12,7 @@ export interface MapCallbacks {
   onPlay(level: number): void;
   onEndless(): void;
   onSettings(): void;
+  onHome(): void; // back to the intro
 }
 
 const svgNS = 'http://www.w3.org/2000/svg';
@@ -42,7 +43,8 @@ export class WorldMap {
     const r = this.root;
     r.innerHTML = '';
     const head = el('header', 'map-head');
-    head.innerHTML = '<div class="map-title"><b class="logo-sm">WORLD BREAKER</b><span class="map-sub" data-i18n="mapSubtitle"></span></div>';
+    head.innerHTML = '<button class="map-title map-home" aria-label="Intro"><b class="logo-sm">WORLD BREAKER</b><span class="map-sub" data-i18n="mapSubtitle"></span></button>';
+    head.querySelector('.map-home')!.addEventListener('click', () => this.cb.onHome());
     this.starsEl = el('div', 'map-stars');
     head.append(this.starsEl);
     this.scroller = el('div', 'map-scroll');
@@ -191,6 +193,7 @@ export class WorldMap {
     if (this.root.classList.contains('hidden')) return;
     if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { e.preventDefault(); this.select(Math.min(STORY_LEVELS, this.selected + 1), false); this.scrollTo(this.selected, false); this.nodes[this.selected - 1].focus(); }
     else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { e.preventDefault(); this.select(Math.max(1, this.selected - 1), false); this.scrollTo(this.selected, false); this.nodes[this.selected - 1].focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); this.cb.onHome(); }
     else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement && !e.target.classList.contains('map-node'))) { e.preventDefault(); this.play(); }
   }
 

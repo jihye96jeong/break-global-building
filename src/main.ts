@@ -138,7 +138,21 @@ function showOverlay(id: string | null) {
   for (const o of ['hud', 'status']) $(o).classList.toggle('hidden', !playing && id !== 'ov-pause');
 }
 
-/** v5: the world map is home. */
+/** The intro (title) screen comes first; its start button leads to the world map. */
+function showTitle() {
+  state.phase = 'TITLE';
+  state.building = null;
+  state.mode = 'endless'; state.story = null;
+  document.body.classList.remove('story');
+  fx.clear();
+  $('title-best').textContent = save.bestScore.toLocaleString();
+  $('title-combo').textContent = String(save.bestCombo);
+  $('title-stars').textContent = `★ ${story.progress.totalStars} / ${STORY_LEVELS * 3}`;
+  showOverlay('ov-title');
+  $('btn-start').focus();
+}
+
+/** v5: the world map (the road of levels) — reached from the intro. */
 function toMap() {
   state.phase = 'TITLE';
   state.building = null;
@@ -479,6 +493,7 @@ function frame(now: number) {
   const b = state.building;
   const fxState: FrameFx = {
     camera, banners, recoil: effects.recoil, danger: effects.danger, debug: debugFeel, debugContact, panY: effects.panY, slashGlow: effects.slashGlow,
+    titleShowcase: state.phase === 'TITLE' && !$('ov-title').classList.contains('hidden') ? { lang } : undefined,
     flash: effects.flash, redFlash: effects.red, cutin: effects.cutin, reducedMotion: reducedMotion || save.effectsLow,
     countdown: state.phase === 'COUNTDOWN' ? state.countdown : null,
     waveCard: state.phase === 'WAVE_TRANSITION' && b ? {
@@ -520,7 +535,7 @@ function bind() {
   onLangChange(() => { syncSound(); last.lang = ''; renderKeyGuide(); });
   renderKeyGuide();
   const click = (id: string, fn: () => void) => $(id).addEventListener('click', () => { audio.unlock(); fn(); });
-  click('btn-start', begin);
+  click('btn-start', toMap); // intro → world map
   click('btn-restart', begin);
   click('btn-home', toMap);
   click('btn-quit', () => { resume(state); toMap(); });
@@ -565,7 +580,9 @@ function bind() {
     if (e.code !== 'Enter' || !$('ov-help').classList.contains('hidden')) return;
     if (e.target instanceof HTMLButtonElement || e.target instanceof HTMLSelectElement) return; // let the focused control act
     const onOver = state.phase === 'GAME_OVER' && !$('ov-over').classList.contains('hidden');
+    const onTitle = state.phase === 'TITLE' && !$('ov-title').classList.contains('hidden');
     if (onOver) begin();
+    else if (onTitle) toMap();
   });
   // the level intro can always be skipped
   const skip = () => { if (state.phase === 'COUNTDOWN' && state.mode === 'story') skipIntro(state); };
@@ -580,6 +597,7 @@ function bind() {
 const worldMap = new WorldMap($('ov-map'), {
   onPlay: (level) => playStory(level),
   onEndless: () => begin(),
+  onHome: () => showTitle(),
   onSettings: () => {
     $<HTMLInputElement>('opt-tutorial').checked = !save.tutorialSeen;
     $<HTMLInputElement>('opt-hp').checked = save.showHpNumbers;
@@ -594,8 +612,8 @@ async function boot() {
   if (debugFeel) debugTick = mountDebugPanel({ state, eventLog, camera, fx, startTest: () => { if (state.phase === 'TITLE' || state.phase === 'GAME_OVER') begin(); } });
   syncSound();
   layout();
-  // the world map shows at once; images stream in, and any that fail are drawn with fallback shapes
-  toMap();
+  // the intro shows first (then the world map); images stream in, and any that fail are drawn with fallback shapes
+  showTitle();
   if (story.corrupted) worldMap.setNote(t('saveCorrupt'));
   // ?level=N goes straight into a level — but only one that is unlocked
   const want = Number(params.get('level'));

@@ -1,7 +1,8 @@
 // Canvas drawing in world units: the world is 600 tall; its width follows the screen's aspect (spec §11.1).
 import { BALANCE, DANGER_Y, GROUND_Y, WORLD_H } from '../config/balance';
 import { GUARD_FEEL, JUMP_FEEL, SPECIAL_SEQ } from '../config/gameFeel';
-import { landmarkById } from '../config/landmarks';
+import { LANDMARKS, landmarkById } from '../config/landmarks';
+import { STORY_STAGES } from '../story/stages';
 import type { StoryStage } from '../story/stages';
 import { attackSurfaceY, guardPlaneY, headY, heroLanePos, motionOwner, type RunState } from '../core/game';
 import type { Banners, Camera } from './camera';
@@ -19,6 +20,8 @@ export interface FrameFx {
   danger: number; // 0..1 DANGER pulse
   debug: boolean;
   debugContact: boolean;
+  /** intro screen: a parade of every landmark under a sky that runs from morning to deep night (the game in one look) */
+  titleShowcase?: { lang: 'ko' | 'en' | 'ja' | 'zh' };
   panY: number; // v4 special: the world slides down so the slash can be followed up to the top
   slashGlow: number;
   flash: number; // 0..1 white flash
@@ -70,6 +73,7 @@ export class Renderer {
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.save();
     g.translate(f.camera.x, f.camera.y + f.panY); // world layer only: hero and building shake (and pan) together, HUD stays put
+    if (f.titleShowcase) { this.drawTitleShowcase(time, f.titleShowcase.lang); g.restore(); return; }
     if (f.story) this.drawStorySky(f.story.stage, f.story.waveIndex, s, time);
     else this.drawBackground(bgLandmarkId);
 
@@ -158,6 +162,70 @@ export class Renderer {
       g.fillStyle = '#ff6b5e'; g.fillText('DANGER!', dx, dy);
       g.restore();
     }
+  }
+
+  /**
+   * The intro: the sky slowly runs through the ten story levels (morning → deep night), every landmark marches past
+   * along the ground with its name, and the ninja stands in front slashing — what the game is, at a glance.
+   */
+  private drawTitleShowcase(time: number, lang: 'ko' | 'en' | 'ja' | 'zh') {
+    const g = this.g, W = this.worldW;
+    const sec = time / 1000;
+    // sky: blend between consecutive story palettes, 3.2 s per level, looping
+    const pos = (sec / 3.2) % STORY_STAGES.length;
+    const a = STORY_STAGES[Math.floor(pos)], b = STORY_STAGES[(Math.floor(pos) + 1) % STORY_STAGES.length], k = pos % 1;
+    const mix = (c1: string, c2: string) => {
+      const p = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+      const x = p(c1), y = p(c2);
+      return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * k)).join(',')})`;
+    };
+    const grd = g.createLinearGradient(0, 0, 0, GROUND_Y);
+    grd.addColorStop(0, mix(a.palette.skyTop, b.palette.skyTop)); grd.addColorStop(1, mix(a.palette.skyBottom, b.palette.skyBottom));
+    g.fillStyle = grd; g.fillRect(-20, -20, W + 40, WORLD_H + 40);
+    const night = Math.max(0, Math.min(1, (pos - 4.5) / 3)) * (pos < 9.6 ? 1 : (10 - pos) / 0.4);
+    if (night > 0) {
+      let seed = 5;
+      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      for (let i = 0; i < 80; i++) { g.fillStyle = `rgba(255,255,255,${(0.3 + 0.6 * rnd()) * night})`; g.fillRect(rnd() * W, rnd() * GROUND_Y * 0.55, 1.6, 1.6); }
+    }
+    // the landmark parade, scrolling right → left, names underneath
+    const H = 165, gap = 46;
+    const items = LANDMARKS.map((l) => {
+      const img = imageNow(l.asset);
+      const h = Math.min(H, Math.max(95, l.displayHeight * 0.52));
+      const w = img ? h * (img.naturalWidth / img.naturalHeight) : h * 0.5;
+      return { l, img, h, w };
+    });
+    const total = items.reduce((acc, it) => acc + it.w + gap, 0);
+    const offset = (sec * 55) % total;
+    g.textAlign = 'center'; g.textBaseline = 'top'; g.lineJoin = 'round';
+    for (let rep = 0; rep < 2; rep++) {
+      let x = -offset + rep * total;
+      for (const it of items) {
+        if (x + it.w > -40 && x < W + 40) {
+          const base = GROUND_Y - 6;
+          if (it.img) g.drawImage(it.img, x, base - it.h, it.w, it.h);
+          else { g.fillStyle = it.l.fallback.color; g.fillRect(x, base - it.h, it.w, it.h); }
+          g.font = '800 11px system-ui, sans-serif';
+          g.lineWidth = 3; g.strokeStyle = 'rgba(20,16,40,.85)';
+          const name = it.l.names[lang];
+          g.strokeText(name, x + it.w / 2, base + 10); g.fillStyle = '#fff'; g.fillText(name, x + it.w / 2, base + 10);
+        }
+        x += it.w + gap;
+      }
+    }
+    // ground
+    const ground = g.createLinearGradient(0, GROUND_Y, 0, WORLD_H);
+    ground.addColorStop(0, 'rgba(60,52,80,.0)'); ground.addColorStop(0.3, 'rgba(30,26,52,.55)'); ground.addColorStop(1, '#1a1634');
+    g.fillStyle = ground; g.fillRect(-20, GROUND_Y + 26, W + 40, WORLD_H - GROUND_Y);
+    g.fillStyle = '#1b1530'; g.fillRect(-20, GROUND_Y - 1.5, W + 40, 3);
+    // the ninja in front, slashing every 1.4 s
+    const cyc = (time % 1400) / 1400;
+    drawHero(g, {
+      x: W / 2, y: 0, facing: 1, attackK: cyc < 0.22 ? cyc / 0.22 : -1, variant: Math.floor(time / 1400) % 3,
+      guarding: false, guardPhase: 'OFF', guardK: 0, air: false, rising: false, moving: false, hurt: false,
+      landK: 0, special: 0, ceiling: Infinity, time, blink: false,
+    });
   }
 
   /** Hero pose during the special: crouch on the charge, spring up with the slash, land on the return. */

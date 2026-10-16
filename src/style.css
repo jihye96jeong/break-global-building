@@ -98,7 +98,9 @@ canvas#view { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 /* ---------- overlays ---------- */
 .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
   background: rgba(16,12,36,.45); overflow-y: auto; }
-#ov-title { background: radial-gradient(ellipse at 50% 50%, rgba(16,12,36,.65), rgba(16,12,36,.15) 75%); }
+/* intro: the title sits high; the landmark parade marches along the ground below it */
+#ov-title { background: linear-gradient(rgba(16,12,36,.55), rgba(16,12,36,.15) 55%, rgba(16,12,36,0) 70%); align-items: flex-start; padding-top: max(3vh, 14px); }
+#ov-title .keys-line { display: none; }
 .title-card { text-align: center; }
 .logo { margin: 0; line-height: .9; font: 900 italic clamp(48px, 10vw, 104px) "Arial Black", Impact, sans-serif; transform: rotate(-4deg); }
 .logo span { display: block; color: #fff; -webkit-text-stroke: 3px var(--ink); text-shadow: 5px 5px 0 var(--ink); }
@@ -224,3 +226,6 @@ body.story .story-only { display: flex; }
 }
 body.story .where .next { display: none; }
 .map-note.warn { color: #ffb4a8; opacity: 1; white-space: normal; }
+.map-home { background: none; border: 0; padding: 0; color: inherit; text-align: left; cursor: pointer; }
+#ov-title .logo { font-size: clamp(40px, 7.4vw, 86px); }
+#ov-title .records { margin-bottom: 10px; }
