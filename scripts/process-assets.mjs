@@ -7,8 +7,9 @@ import sharp from 'sharp';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'art-source');
 const OUT = path.join(ROOT, 'public', 'assets');
-// art-source/character (optional illustrated hero) is not shipped: the game draws a stick figure
-const OUT_DIR = { building: 'buildings', background: 'backgrounds', fx: 'fx' };
+const OUT_DIR = { building: 'buildings', background: 'backgrounds', fx: 'fx', character: 'characters' };
+// the old illustrated hero (hero_*) stays in art-source only; the ninja (ninja_*) ships
+const SHIP_CHARACTER = (id) => id.startsWith('ninja_');
 const only = process.argv.find((a) => a.startsWith('--id='))?.slice(5);
 
 // "magenta-ness": how far both R and B sit above G. Pure #FF00FF scores 255; art rarely above ~60.
@@ -92,6 +93,7 @@ async function main() {
     for (const f of files.sort()) {
       const id = path.parse(f).name;
       if (only && id !== only) continue;
+      if (type === 'character' && !SHIP_CHARACTER(id)) continue;
       const out = path.join(OUT, OUT_DIR[type], `${id}.webp`);
       const src = path.join(dir, f);
       const info = type === 'background' || type === 'fx' ? await background(src, out)

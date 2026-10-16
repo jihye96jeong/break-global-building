@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { LANDMARKS } from './prompts.mjs';
+import { EXTRA_LANDMARKS, LANDMARKS, SKIES } from './prompts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const A = path.join(ROOT, 'public', 'assets');
@@ -12,6 +12,10 @@ for (const id of Object.keys(LANDMARKS)) {
   checks.push({ file: `buildings/${id}.webp`, alpha: true, minOpaque: 0.12, maxOpaque: 0.9, minSide: 400 });
   checks.push({ file: `backgrounds/${id}.webp`, alpha: false, minSide: 1280, landscape: true });
 }
+for (const id of Object.keys(EXTRA_LANDMARKS)) checks.push({ file: `buildings/${id}.webp`, alpha: true, minOpaque: 0.12, maxOpaque: 0.9, minSide: 400 });
+for (const id of Object.keys(SKIES)) checks.push({ file: `backgrounds/${id}.webp`, alpha: false, minSide: 1280, landscape: true });
+checks.push({ file: 'fx/special_cutin.webp', alpha: false, minSide: 1280, landscape: true });
+for (const p of ['idle', 'attack', 'jump', 'guard', 'hurt']) checks.push({ file: `characters/ninja_${p}.webp`, alpha: true, minOpaque: 0.1, maxOpaque: 0.9, minSide: 150 });
 
 let failed = 0, total = 0;
 for (const c of checks) {

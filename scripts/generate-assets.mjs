@@ -84,7 +84,8 @@ async function generate(job) {
       }
     }
   }
-  const prompt = job.editFrom ? `${(await import('./prompts.mjs')).HERO_POSES.hero_idle}\nPose: ${job.prompt}` : job.prompt;
+  const base = job.editFrom ? allJobs().find((j) => j.id === job.editFrom)?.prompt ?? '' : '';
+  const prompt = job.editFrom ? `${base}\nPose: ${job.prompt}` : job.prompt;
   return { mode: 'generate', bytes: await callApi('/images/generations', {
     model: MODEL, prompt, n: 1, aspect_ratio: job.aspect, resolution: job.resolution, quality: job.quality, response_format: 'b64_json',
   }) };

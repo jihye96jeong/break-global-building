@@ -52,6 +52,14 @@ describe('difficulty (spec §8)', () => {
     expect(share(2)).toBeGreaterThan(share(0));
   });
 
+  it('new buildings appear mostly on screen, between y=85 and y=240', () => {
+    for (let i = 1; i < 40; i++) {
+      const b = spawnBuilding(5, i, i, []);
+      expect(b.bottomY).toBeGreaterThanOrEqual(85);
+      expect(b.bottomY).toBeLessThanOrEqual(240);
+    }
+  });
+
   it('T26 every 5th building is ELITE with the tier maximum of floors', () => {
     for (const i of [5, 10, 15]) {
       const b = spawnBuilding(3, i, 0, []);

@@ -12,6 +12,7 @@ export interface Intents {
   jumpPressed: boolean;
   guard: boolean; guardPressed: boolean;
   specialPressed: boolean; // a new key/finger press only: holding X never fires the special
+  laneTo?: Lane; // touch: tap a lane to go straight there
 }
 export const NO_INPUT: Intents = {
   left: false, leftPressed: false, right: false, rightPressed: false, attack: false, attackPressed: false,
@@ -211,7 +212,10 @@ function updatePlayer(s: RunState, dt: number, input: Intents) {
     if (to === p.lane) return;
     p.laneFrom = p.lane; p.lane = to; p.laneAnimMs = BALANCE.laneMoveMs; p.moveRepeatMs = BALANCE.laneRepeatMs;
   };
-  if (input.leftPressed) step(-1);
+  if (input.laneTo !== undefined && input.laneTo !== p.lane) {
+    p.facing = input.laneTo > p.lane ? 1 : -1;
+    p.laneFrom = p.lane; p.lane = input.laneTo; p.laneAnimMs = BALANCE.laneMoveMs; p.moveRepeatMs = BALANCE.laneRepeatMs;
+  } else if (input.leftPressed) step(-1);
   else if (input.rightPressed) step(1);
   else if (input.left && !input.right && p.moveRepeatMs <= 0) step(-1);
   else if (input.right && !input.left && p.moveRepeatMs <= 0) step(1);

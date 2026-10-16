@@ -3,7 +3,11 @@
 
 export const WORLD_H = 600;
 export const GROUND_Y = 530; // ground / danger line: a building whose bottom reaches it crushes the hero
-export const SPAWN_BOTTOM_Y = 85; // a new building's lowest floor appears here
+export const SPAWN_BOTTOM_Y = 85; // a new building's lowest floor never appears higher than this
+/** …and never lower than this, so there is always room to react */
+export const SPAWN_BOTTOM_MAX = 240;
+/** share of a new building that should be on screen when it appears */
+export const SPAWN_VISIBLE_SHARE = 0.8;
 export const LANES = 3;
 
 export const BALANCE = {

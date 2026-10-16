@@ -6,7 +6,7 @@ export function floor(hp: [HP, HP, HP], ordinal = 1, height = 40): Floor {
 }
 
 export function building(floors: Floor[], bottomY = 200): FallingBuilding {
-  return { id: 'test', index: 1, landmarkId: 'gyeongbokgung', floors, originalFloorCount: floors.length, bottomY,
+  return { id: 'test', index: 1, landmarkId: 'gyeongbokgung', floors, originalFloorCount: floors.length, totalHeight: floors.reduce((a, f) => a + f.height, 0), bottomY,
     baseSpeed: 115, velocityY: 115, tier: 1, elite: false, defeated: false };
 }
 

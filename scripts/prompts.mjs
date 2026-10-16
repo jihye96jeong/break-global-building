@@ -133,6 +133,28 @@ export const HERO_POSES = {
     'leaning back, arms flailing, swirly eyes, cartoon bump, no injury. Plain solid flat magenta (#FF00FF) background, character only, no text, no shadow.',
 };
 
+// The playable hero: a ninja with an oversized sword. The weapon is the point here, so this anchor drops
+// the shared style anchor's "no weapons"; poses after idle are edits of the idle image to keep one character.
+const NINJA_ANCHOR = STYLE_ANCHOR.replace(' no weapons,', '');
+const NINJA = 'An original cool arcade ninja hero, sleek midnight-indigo ninja outfit with a long flowing crimson scarf, ' +
+  'black mask with determined glowing eyes, lean athletic proportions, wielding one HUGE oversized two-handed great sword ' +
+  'with a broad steel blade almost as long as the ninja is tall and a gold-wrapped hilt, full body visible, side view facing right, ' +
+  'readable at 80 pixels tall, plain solid flat magenta (#FF00FF) background, character only, no text, no shadow, no extra limbs. ' +
+  'The character and sword must not contain any magenta or pink colour.';
+export const NINJA_POSES = {
+  ninja_idle: `${NINJA_ANCHOR}\n${NINJA} Ready stance, knees bent, the giant sword resting on one shoulder.`,
+  ninja_attack: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now a powerful upward slash: ' +
+    'springing up with the giant sword swung straight up overhead toward the sky, blade pointing up, scarf whipping. ' +
+    'Plain solid flat magenta (#FF00FF) background, character only, no effects, no text, no shadow.',
+  ninja_jump: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now mid-air in a high jump: ' +
+    'knees tucked, giant sword held back ready to strike, scarf trailing. Plain solid flat magenta (#FF00FF) background, character only, no text, no shadow.',
+  ninja_guard: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now guarding: crouched low, ' +
+    'holding the giant sword flat and horizontal above the head with both hands like a shield against something falling from above. ' +
+    'Plain solid flat magenta (#FF00FF) background, character only, no text, no shadow.',
+  ninja_hurt: 'Same exact ninja, same outfit, colours, proportions and the same huge sword, same art style. Now comically knocked back: ' +
+    'stumbling backwards, dizzy swirl eyes, cartoon stars, sword wobbling, no injury. Plain solid flat magenta (#FF00FF) background, character only, no text, no shadow.',
+};
+
 // The full job list. type: building | background | character
 export function allJobs() {
   const jobs = [];
@@ -148,6 +170,10 @@ export function allJobs() {
       prompt: `${STYLE_ANCHOR}\nA colorful illustrated atmospheric background plate for an arcade game: ${scene}. ` +
         'Everything in the scenery stays low and small in the bottom quarter; the rest is open sky. ' +
         'No dominant landmark, no tall tower, no characters, no interface, no text, no watermark. Wide horizontal 16:9 composition.' });
+  }
+  jobs.push({ id: 'ninja_idle', type: 'character', prompt: NINJA_POSES.ninja_idle, aspect: '1:1', resolution: '1k', quality: 'medium' });
+  for (const id of ['ninja_attack', 'ninja_jump', 'ninja_guard', 'ninja_hurt']) {
+    jobs.push({ id, type: 'character', prompt: NINJA_POSES[id], aspect: '1:1', resolution: '1k', quality: 'medium', editFrom: 'ninja_idle' });
   }
   jobs.push({ id: 'special_cutin', type: 'fx', aspect: '16:9', resolution: '1k', quality: 'medium',
     prompt: `${STYLE_ANCHOR}\nAn abstract dramatic arcade special-move cut-in background: a single huge diagonal white-blue sword-light slash ` +

@@ -1,5 +1,5 @@
 // Falling buildings: floors × 3 lanes of HP. One lane reaching 0 destroys the whole floor (spec §5).
-import { BALANCE, LANES, SPAWN_BOTTOM_Y, speedMultiplier, tierFor, type Tier } from '../config/balance';
+import { BALANCE, LANES, SPAWN_BOTTOM_MAX, SPAWN_BOTTOM_Y, SPAWN_VISIBLE_SHARE, speedMultiplier, tierFor, type Tier } from '../config/balance';
 import { LANDMARKS, type Landmark } from '../config/landmarks';
 import { hashString, makeRng, type Rng } from './rng';
 
@@ -24,6 +24,8 @@ export interface FallingBuilding {
   landmarkId: string;
   floors: Floor[]; // [0] = current lowest floor
   originalFloorCount: number;
+  /** height of all floors at spawn; the art keeps this size while floors are cut away below */
+  totalHeight: number;
   bottomY: number;
   baseSpeed: number;
   velocityY: number;
@@ -114,6 +116,11 @@ export function layoutFloors(landmark: Landmark, count: number) {
   return out;
 }
 
+/** Where a building of this height appears: mostly on screen, but never too close to the ground. */
+export function spawnBottom(totalHeight: number) {
+  return Math.min(SPAWN_BOTTOM_MAX, Math.max(SPAWN_BOTTOM_Y, 40 + totalHeight * SPAWN_VISIBLE_SHARE));
+}
+
 export function spawnBuilding(runSeed: number, index: number, destroyed: number, recent: string[]): FallingBuilding {
   const rng = buildingRng(runSeed, index);
   const tier = tierFor(destroyed);
@@ -130,7 +137,8 @@ export function spawnBuilding(runSeed: number, index: number, destroyed: number,
   const speed = BALANCE.baseFallSpeed * speedMultiplier(destroyed);
   return {
     id: `b${index}`, index, landmarkId: landmark.id, floors, originalFloorCount: count,
-    bottomY: SPAWN_BOTTOM_Y, baseSpeed: speed, velocityY: speed, tier: tier.tier, elite, defeated: false,
+    totalHeight: floors.reduce((a, f) => a + f.height, 0),
+    bottomY: spawnBottom(floors.reduce((a, f) => a + f.height, 0)), baseSpeed: speed, velocityY: speed, tier: tier.tier, elite, defeated: false,
   };
 }
 

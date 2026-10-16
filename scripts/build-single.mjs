@@ -10,8 +10,8 @@ const OUT = path.join(ROOT, 'dist-single');
 const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
 
 const assets = {};
-for (const dir of ['buildings', 'backgrounds']) {
-  for (const f of fs.readdirSync(path.join(DIST, 'assets', dir))) {
+for (const dir of fs.readdirSync(path.join(DIST, 'assets'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
+  for (const f of fs.readdirSync(path.join(DIST, 'assets', dir)).filter((f) => f.endsWith('.webp'))) {
     const b64 = fs.readFileSync(path.join(DIST, 'assets', dir, f)).toString('base64');
     assets[`assets/${dir}/${f}`] = `data:image/webp;base64,${b64}`;
   }

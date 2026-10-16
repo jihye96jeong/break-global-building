@@ -4,149 +4,120 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#1d1a3a" />
-  <meta name="description" content="WORLD BREAKER — 세계 랜드마크를 부수는 2D 아케이드 액션 게임 / Smash the world’s landmarks" />
+  <meta name="description" content="WORLD BREAKER — 세계 랜드마크를 부수는 2D 아케이드 액션 (건물 부수기 오마주)" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%232f6bff%22/%3E%3Cpath d=%22M9 24V12l4-4 4 4v12M19 24V6h5v18%22 stroke=%22%23fff%22 stroke-width=%223%22 fill=%22none%22/%3E%3C/svg%3E" />
-  <title>WORLD BREAKER — 세계 건물 부수기</title>
-  
+  <title>WORLD BREAKER</title>
 </head>
 <body>
-  <div id="wrap">
-    <div id="matte" aria-hidden="true"></div>
-    <div id="game" aria-label="WORLD BREAKER">
-      <canvas id="view"></canvas>
-      <p id="rotate-hint" data-i18n="rotate"></p>
+  <div id="app">
+    <div id="stage">
+      <canvas id="view" aria-label="WORLD BREAKER"></canvas>
 
-      <div id="hud" class="hidden">
-        <div class="hud-row">
-          <div id="hearts" data-i18n-aria="lives"></div>
-          <div id="stage-label"><b id="stage-no">STAGE 01</b><span id="stage-city">SEOUL</span></div>
-          <div id="score">00000000</div>
+      <header id="hud" class="hidden">
+        <div class="hud-left">
+          <div id="hearts" data-i18n-aria="pause"></div>
+          <div class="score-box"><span class="lbl" data-i18n="score"></span><b id="score">000000000</b><span class="best"><span data-i18n="best"></span> <b id="best">0</b></span></div>
+        </div>
+        <div class="hud-center">
+          <div id="combo" class="combo hidden"><b id="combo-n">0</b> <span data-i18n="combo"></span></div>
+        </div>
+        <div class="hud-right">
+          <div class="where"><b id="tier">TIER 1 · EASY</b><span id="bname"></span><span class="next"><span data-i18n="next"></span>: <b id="next-name"></b></span></div>
+          <button id="btn-mute" class="icon-btn" data-i18n-aria="mute" aria-pressed="false">♪</button>
           <button id="btn-pause" class="icon-btn" data-i18n-aria="pause">Ⅱ</button>
         </div>
-        <div id="landmark-name"></div>
-      </div>
+      </header>
 
-      <div id="guard" class="hidden" data-i18n-aria="guardLabel">
-        <span class="guard-label">GUARD</span>
-        <div class="guard-track"><div id="guard-fill"></div></div>
-      </div>
-      <div id="gauge" class="hidden" data-i18n-aria="gaugeLabel">
-        <span class="gauge-label">SUPER</span>
-        <div class="gauge-track"><div id="gauge-fill"></div></div>
-        <span id="gauge-pct">0%</span>
-      </div>
+      <div id="hint" class="hint hidden" role="status"></div>
 
-      <!-- desktop: keyboard guide; touch devices: on-screen buttons -->
-      <div id="keybar" class="hidden" aria-hidden="true">
-        <span><kbd>←</kbd><kbd>→</kbd> <span data-i18n="move"></span></span>
-        <span><kbd>↑</kbd> <span data-i18n="jump"></span></span>
-        <span><kbd>↓</kbd> <span data-i18n="guardKey"></span></span>
-        <span><kbd>Z</kbd> <span data-i18n="attack"></span></span>
-        <span class="kb-ult"><kbd>X</kbd> <span data-i18n="ultimate"></span></span>
-        <span><kbd>Esc</kbd> <span data-i18n="pause"></span></span>
-      </div>
-      <div id="controls" class="hidden">
-        <div class="ctl-group">
-          <button class="ctl ctl-move" id="btn-left" data-i18n-aria="moveLeft">◀</button>
-          <button class="ctl ctl-move" id="btn-right" data-i18n-aria="moveRight">▶</button>
-          <button class="ctl ctl-guard" id="btn-guard" data-i18n-aria="guardKey">▼</button>
-        </div>
-        <div class="ctl-group">
-          <button class="ctl ctl-jump" id="btn-jump" data-i18n-aria="jump">▲</button>
-          <button class="ctl ctl-attack" id="btn-attack" data-i18n="attack"></button>
-          <button class="ctl ctl-ult" id="btn-ult" aria-label="BREAK!" disabled>BREAK!</button>
-        </div>
-      </div>
+      <footer id="status" class="hidden">
+        <div class="gauge guard"><span class="g-lbl">GUARD</span><div class="g-track"><div id="guard-fill"></div></div><span id="guard-pct">100%</span></div>
+        <p id="keyguide" data-i18n="keyGuide"></p>
+        <div class="gauge special" id="special-wrap"><span class="g-lbl">SPECIAL</span><div class="g-track"><div id="special-fill"></div></div><span id="special-pct">0%</span><span id="special-ready" class="ready hidden">SPECIAL READY</span></div>
+      </footer>
 
-      <!-- overlays: every app state lives on this one page -->
+      <!-- every app state lives on this one page -->
       <section id="ov-title" class="overlay">
         <div class="title-card">
           <h1 class="logo"><span>WORLD</span><span>BREAKER</span></h1>
           <p class="subtitle" data-i18n="subtitle"></p>
-          <p class="best"><span data-i18n="best"></span> <b id="title-best">00000000</b></p>
-          <button id="btn-start" class="big-btn" disabled data-i18n="loading"></button>
+          <p class="records"><span data-i18n="best"></span> <b id="title-best">0</b> · <span data-i18n="bestCombo"></span> <b id="title-combo">0</b></p>
+          <button id="btn-start" class="big-btn" data-i18n="start"></button>
           <div class="row">
             <button id="btn-help" class="small-btn" data-i18n="help"></button>
-            <button id="btn-sound" class="small-btn sound-toggle" aria-pressed="true"></button>
+            <button id="btn-sound" class="small-btn sound-toggle"></button>
             <label class="lang"><span class="sr" data-i18n="language"></span><select class="lang-select small-btn"></select></label>
           </div>
-          <p id="load-error" class="error hidden"></p>
+          <p class="keys-line" data-i18n="keyGuide"></p>
         </div>
       </section>
 
       <section id="ov-help" class="overlay hidden">
         <div class="panel">
-          <h2 data-i18n="help"></h2>
+          <h2 data-i18n="helpTitle"></h2>
           <table class="keys">
-            <tr><th data-i18n="move"></th><td><kbd>←</kbd><kbd>→</kbd></td><td data-i18n="touchMove"></td></tr>
-            <tr><th data-i18n="jump"></th><td><kbd>↑</kbd></td><td>▲</td></tr>
-            <tr><th data-i18n="guardKey"></th><td><kbd>↓</kbd></td><td>▼</td></tr>
-            <tr><th data-i18n="attack"></th><td><kbd>Z</kbd> (<span data-i18n="holdRepeat"></span>)</td><td data-i18n="touchAttack"></td></tr>
-            <tr><th data-i18n="ultimate"></th><td><kbd>X</kbd> (<span data-i18n="gaugeFull"></span>)</td><td data-i18n="touchUlt"></td></tr>
-            <tr><th data-i18n="pause"></th><td><kbd>Esc</kbd> <span data-i18n="or"></span> <kbd>P</kbd></td><td data-i18n="touchPause"></td></tr>
+            <tr><th data-i18n="move"></th><td><kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd></td></tr>
+            <tr><th data-i18n="jump"></th><td><kbd>↑</kbd> / <kbd>W</kbd> / <kbd>Space</kbd></td></tr>
+            <tr><th data-i18n="guard"></th><td><kbd>↓</kbd> / <kbd>S</kbd></td></tr>
+            <tr><th data-i18n="attack"></th><td><kbd>Z</kbd> / <kbd>J</kbd></td></tr>
+            <tr><th data-i18n="special"></th><td><kbd>X</kbd> / <kbd>K</kbd></td></tr>
+            <tr><th data-i18n="pause"></th><td><kbd>Esc</kbd> / <kbd>P</kbd> · <span data-i18n="mute"></span> <kbd>M</kbd></td></tr>
           </table>
           <ul class="rules">
             <li data-i18n-html="rule1"></li>
             <li data-i18n-html="rule2"></li>
             <li data-i18n-html="rule3"></li>
             <li data-i18n-html="rule4"></li>
-            <li data-i18n-html="rule5"></li>
-            <li data-i18n-html="rule6"></li>
           </ul>
+          <label class="check"><input type="checkbox" id="opt-tutorial" /> <span data-i18n="showTutorial"></span></label>
+          <label class="check"><input type="checkbox" id="opt-hp" /> <span data-i18n="showHp"></span></label>
           <button class="big-btn" data-close="ov-help" data-i18n="ok"></button>
-        </div>
-      </section>
-
-      <section id="ov-intro" class="overlay passthrough hidden">
-        <div class="intro">
-          <p id="intro-stage">STAGE 01</p>
-          <h2 id="intro-name"></h2>
-          <p id="intro-en"></p>
         </div>
       </section>
 
       <section id="ov-pause" class="overlay hidden">
         <div class="panel center">
-          <h2 data-i18n="pause"></h2>
+          <h2 data-i18n="paused"></h2>
           <button id="btn-resume" class="big-btn" data-i18n="resume"></button>
           <div class="row">
-            <button id="btn-pause-sound" class="small-btn sound-toggle" aria-pressed="true"></button>
+            <button id="btn-pause-sound" class="small-btn sound-toggle"></button>
             <label class="lang"><span class="sr" data-i18n="language"></span><select class="lang-select small-btn"></select></label>
             <button id="btn-quit" class="small-btn" data-i18n="quit"></button>
           </div>
         </div>
       </section>
 
-      <section id="ov-clear" class="overlay hidden">
-        <div class="panel center">
-          <p class="eyebrow">STAGE CLEAR</p>
-          <h2 id="clear-name"></h2>
-          <dl class="tally">
-            <dt data-i18n="stageScore"></dt><dd id="clear-stage-score">0</dd>
-            <dt data-i18n="clearBonus"></dt><dd id="clear-bonus">0</dd>
-            <dt data-i18n="noDamageBonus"></dt><dd id="clear-nodmg">0</dd>
-            <dt data-i18n="total"></dt><dd id="clear-total">0</dd>
-          </dl>
-          <p class="next"><span data-i18n="nextPlace"></span> <b id="clear-next"></b></p>
-          <button id="btn-next" class="big-btn" data-i18n="next"></button>
-        </div>
-      </section>
-
       <section id="ov-over" class="overlay hidden">
         <div class="panel center">
-          <p class="eyebrow" id="over-eyebrow">GAME OVER</p>
-          <h2 id="over-title"></h2>
-          <p id="over-record" class="record hidden">NEW RECORD!</p>
+          <h2 data-i18n="gameOver"></h2>
+          <p id="over-record" class="record hidden" data-i18n="newRecord"></p>
           <dl class="tally">
             <dt data-i18n="score"></dt><dd id="over-score">0</dd>
+            <dt data-i18n="destroyed"></dt><dd id="over-destroyed">0</dd>
+            <dt data-i18n="maxCombo"></dt><dd id="over-combo">0</dd>
             <dt data-i18n="best"></dt><dd id="over-best">0</dd>
-            <dt data-i18n="stageReached"></dt><dd id="over-stage">1</dd>
           </dl>
           <button id="btn-restart" class="big-btn" data-i18n="restart"></button>
-          <button id="btn-home" class="small-btn" data-i18n="toTitle"></button>
+          <button id="btn-home" class="small-btn" data-i18n="quit"></button>
         </div>
       </section>
     </div>
+
+    <!-- touch devices only: six buttons, all usable at once -->
+    <nav id="pad" aria-hidden="true">
+      <div class="pad-group">
+        <button class="pb" id="pb-left">◀</button>
+        <button class="pb" id="pb-right">▶</button>
+      </div>
+      <div class="pad-group">
+        <button class="pb" id="pb-jump">▲</button>
+        <button class="pb" id="pb-guard">▼</button>
+      </div>
+      <div class="pad-group">
+        <button class="pb pb-attack" id="pb-attack" data-i18n="attack"></button>
+        <button class="pb pb-special" id="pb-special" disabled>X</button>
+      </div>
+    </nav>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
