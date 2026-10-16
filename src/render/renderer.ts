@@ -96,12 +96,12 @@ export class Renderer {
       g.strokeStyle = 'rgba(255,90,70,.7)'; g.lineWidth = 2;
       for (let i = -2; i <= 2; i++) { const xx = x + i * 14, yy = GROUND_Y - BALANCE.heroHeight - p.y - 10 - Math.abs(i) * 3; g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx + i * 3, yy - 10); g.stroke(); }
     }
-    drawHero(g, {
+    if (s.phase !== 'BURIED') drawHero(g, { // buried: the hero is completely under the building
       x, y: p.y, facing: p.facing,
       attackK: p.attackAnimMs > 0 ? 1 - p.attackAnimMs / BALANCE.attackAnimMs : -1,
       variant: (p.swingCount + 2) % 3,
       guarding: p.guarding, guardPhase: s.guardPhase, guardK,
-      air: p.y > 0, rising: p.vy > 0 && p.jumpElapsed < JUMP_FEEL.takeoffStretchMs / 1000, moving: p.laneAnimMs > 0, hurt: s.phase === 'DAMAGE_IMPACT',
+      air: p.y > 0, rising: p.vy > 0 && p.jumpElapsed < JUMP_FEEL.takeoffStretchMs / 1000, moving: p.laneAnimMs > 0, hurt: false,
       landK: p.landMs / JUMP_FEEL.landingSquashMs,
       special: this.specialLift(s),
       ceiling, time, blink: invuln && Math.floor(time / 80) % 2 === 0,

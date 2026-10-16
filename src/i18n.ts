@@ -47,6 +47,7 @@ const ko = {
   keyGuide: '← → 이동 · ↑ 점프 · ↓ 가드 · Z 공격 · X 필살기 · Esc 일시정지 · M 음소거',
   rotate: '가로로 돌리면 더 넓게 볼 수 있어요',
   floors: '층',
+  escapeHint: 'Z 를 눌러 건물을 부수고 탈출!',
 };
 export type Key = keyof typeof ko;
 
@@ -93,6 +94,7 @@ const en: Record<Key, string> = {
   keyGuide: '← → move · ↑ jump · ↓ guard · Z attack · X special · Esc pause · M mute',
   rotate: 'Turn your phone sideways for a wider view',
   floors: 'floors',
+  escapeHint: 'Press Z to smash your way out!',
 };
 
 const ja: Record<Key, string> = {
@@ -138,6 +140,7 @@ const ja: Record<Key, string> = {
   keyGuide: '← → 移動 · ↑ ジャンプ · ↓ ガード · Z 攻撃 · X 必殺技 · Esc 一時停止 · M ミュート',
   rotate: '横向きにすると広く見られます',
   floors: '階',
+  escapeHint: 'Z で建物をこわして脱出!',
 };
 
 const zh: Record<Key, string> = {
@@ -183,6 +186,7 @@ const zh: Record<Key, string> = {
   keyGuide: '← → 移动 · ↑ 跳跃 · ↓ 防御 · Z 攻击 · X 必杀技 · Esc 暂停 · M 静音',
   rotate: '横屏可以看得更宽',
   floors: '层',
+  escapeHint: '按 Z 砸碎大楼逃出来!',
 };
 
 const DICT: Record<Lang, Record<Key, string>> = { ko, en, ja, zh };

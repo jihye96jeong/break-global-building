@@ -10,6 +10,7 @@ export const JUMP_FEEL = {
   jumpBuffer: 0.11, // s: a press just before landing still jumps
   landingSquashMs: 100,
   takeoffStretchMs: 100,
+  homingOvershoot: 10, // wu: a leap toward a high building aims a little past its underside so it always touches
 };
 
 /**

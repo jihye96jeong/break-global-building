@@ -2,9 +2,9 @@
 // VIS (frame-rate / render independence). World units; gap = pose surface − underside (> 0 = apart).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BALANCE, DANGER_Y } from '../src/config/balance';
+import { BALANCE, DANGER_Y, GROUND_Y } from '../src/config/balance';
 import { CONTACT, GUARD_FEEL } from '../src/config/gameFeel';
-import { attack, attackSurfaceY, guardPlaneY, laneOverlap, motionOwner, NO_INPUT, special, sweptContact, takeEvents, tick, type GameEvent, type Intents, type RunState } from '../src/core/game';
+import { attack, attackSurfaceY, guardPlaneY, laneOverlap, NO_INPUT, special, sweptContact, takeEvents, tick, type GameEvent, type Intents, type RunState } from '../src/core/game';
 import type { HP } from '../src/core/building';
 import { building, floor, playing } from './helpers';
 
@@ -296,56 +296,63 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
   });
 });
 
-describe('CR — v4 crush: one life, collision off, the hero recovers', () => {
+describe('CR — crush: one life, the hero buried under the building, Z breaks out and blasts it back up', () => {
   const crush = (speed = 190) => { const s = playing(building(tall(5), DANGER_Y - 20)); s.building!.baseSpeed = speed; s.building!.velocityY = speed; return s; };
+  const untilBuried = (s: RunState) => { const ev: GameEvent[] = []; while (s.phase === 'PLAYING') ev.push(...step(s)); for (let i = 0; i < 12; i++) ev.push(...step(s)); return ev; };
 
-  it('CR-01/02 a crush costs exactly one life, however much is pressed for the next 60 frames', () => {
+  it('CR-01 a crush costs exactly one life and the building comes all the way down over the hero', () => {
     const s = crush();
-    const first = s.building!;
-    let ev: GameEvent[] = [];
-    while (s.phase === 'PLAYING') ev = ev.concat(step(s)); // no answer: crushed
-    for (let i = 0; i < 60; i++) ev = ev.concat(step(s, { attack: true, attackPressed: true, guard: true, guardPressed: i % 3 === 0, jumpPressed: i % 7 === 0, jump: true }));
+    const ev = untilBuried(s);
+    expect(s.phase).toBe('BURIED');
     expect(count(ev, 'lifeLost')).toBe(1);
-    expect(count(ev, 'crushed')).toBe(1);
+    expect(count(ev, 'buried')).toBe(1);
     expect(s.lives).toBe(2);
-    expect(first.collisionDisabled).toBe(true);
+    expect(s.building!.bottomY).toBe(GROUND_Y); // the hero (head at 468) is completely under it
+    for (let i = 0; i < 120; i++) step(s, { guard: true, guardPressed: true, jump: true, jumpPressed: true }); // nothing but Z gets out
+    expect(s.phase).toBe('BURIED');
+    expect(s.lives).toBe(2);
   });
 
-  it('CR-03/04 during the damage sequence Z changes nothing and the crushed building never jumps up', () => {
+  it('CR-02 Z breaks the floor on top of the hero (one floor) and the building flies back up high', () => {
     const s = crush();
-    while (s.phase === 'PLAYING') step(s);
-    expect(s.phase).toBe('DAMAGE_IMPACT');
+    untilBuried(s);
     const b = s.building!;
-    const y = b.bottomY, score = s.score, special = s.special;
-    let ev: GameEvent[] = [];
-    while (s.phase === 'DAMAGE_IMPACT' || s.phase === 'RECOVER') {
-      expect(motionOwner(s)).toBe('NONE'); // collision off, nobody moves it
-      ev = ev.concat(step(s, { attack: true, attackPressed: true, specialPressed: true }));
-      if (s.building === b) expect(b.bottomY).toBe(y);
-    }
-    expect(count(ev, 'hit') + count(ev, 'floor') + count(ev, 'swing')).toBe(0);
-    expect([s.score, s.special]).toEqual([score, special]);
+    const floors = b.floors.length, score = s.score;
+    const ev = step(s, { attack: true, attackPressed: true });
+    expect(count(ev, 'buriedBreak')).toBe(1);
+    expect(b.floors.length).toBe(floors - 1);
+    expect(s.phase).toBe('ESCAPE');
+    let prev = b.bottomY;
+    while (s.phase === 'ESCAPE') { step(s, { attack: true, attackPressed: true }); expect(b.bottomY).toBeLessThanOrEqual(prev + 1e-9); prev = b.bottomY; }
+    expect(s.phase).toBe('PLAYING');
+    expect(b.bottomY).toBeLessThan(DANGER_Y - 200); // back up at its spawn height
+    expect(s.lives).toBe(2);
+    expect(s.score).toBe(score); // escaping is not scored
   });
 
-  it('CR-05 after recovery the hero stands on the ground in their lane and a new building comes (≤0.5 s)', () => {
+  it('CR-03 mashing Z under the rubble breaks exactly one floor; no more lives are lost', () => {
     const s = crush();
-    s.player.lane = 2; s.player.laneFrom = 2;
-    s.player.y = 30; s.player.vy = 0;
-    let t = 0;
-    while (s.phase === 'PLAYING') { step(s); t += DT; }
-    const crushedAt = t;
-    while (s.phase === 'DAMAGE_IMPACT' || s.phase === 'RECOVER') { step(s); t += DT; }
-    expect(t - crushedAt).toBeLessThanOrEqual(0.42);
-    expect(s.phase).toBe('WAVE_TRANSITION');
-    expect([s.player.y, s.player.lane]).toEqual([0, 2]);
-    expect(s.building!.id).not.toBe('test');
-    expect(s.building!.bottomY).toBeLessThan(DANGER_Y - 100);
+    untilBuried(s);
+    const floors = s.building!.floors.length;
+    let ev: GameEvent[] = [];
+    for (let i = 0; i < 30; i++) ev = ev.concat(step(s, { attack: true, attackPressed: true }));
+    expect(count(ev, 'buriedBreak')).toBe(1);
+    expect(s.building!.floors.length).toBeGreaterThanOrEqual(floors - 1 - count(ev, 'floor'));
+    expect(count(ev, 'lifeLost')).toBe(0);
   });
 
-  it('CR-06 the last life → GAME OVER and no next building', () => {
+  it('CR-04 breaking out from under a one-floor building clears it and the next one comes', () => {
+    const s = playing(building([floor([3, 3, 3])], DANGER_Y - 5));
+    untilBuried(s);
+    step(s, { attack: true, attackPressed: true });
+    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect(s.building!.id).not.toBe('test');
+  });
+
+  it('CR-05 the last life → buried → GAME OVER, no escape and no next building', () => {
     const s = crush();
     s.lives = 1;
-    for (let i = 0; i < 60; i++) step(s);
+    for (let i = 0; i < 90; i++) step(s, { attack: i > 30, attackPressed: i > 30 });
     expect(s.lives).toBe(0);
     expect(s.phase).toBe('GAME_OVER');
     expect(s.building).toBeNull();

@@ -54,6 +54,27 @@ describe('jump (v2 §3)', () => {
     expect(hits).toBeGreaterThanOrEqual(1);
   });
 
+  it('no height limit but the building: from the ground, any jump (even a tap) reaches a high building\'s underside', () => {
+    for (const bottom of [80, 150, 250, 330]) for (const hold of [0.03, 1]) {
+      const s = playing(building(tall(6), bottom));
+      s.building!.velocityY = 0; s.building!.baseSpeed = 0;
+      let touched = false, t = 0;
+      tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true });
+      for (; t < 1.2 && !touched; t += DT) { tick(s, DT, { ...NO_INPUT, jump: t < hold }); if (attackSurfaceY(s) - s.building!.bottomY <= 2) touched = true; }
+      expect(touched).toBe(true);
+      expect(attackSurfaceY(s)).toBeGreaterThanOrEqual(s.building!.bottomY - 0.001); // stopped by it, never inside
+    }
+  });
+
+  it('a held Z during a leap to a high building lands real hits up there', () => {
+    const s = playing(building(tall(6, [1, 1, 1]), 100));
+    s.building!.velocityY = 0; s.building!.baseSpeed = 0;
+    tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true });
+    let hits = 0;
+    for (let i = 0; i < 50; i++) { tick(s, DT, { ...NO_INPUT, jump: true, attack: true }); hits += takeEvents(s).filter((e) => e.t === 'hit').length; }
+    expect(hits).toBeGreaterThanOrEqual(1);
+  });
+
   it('a jump buffered just before landing still fires', () => {
     const s = open();
     tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true });
@@ -116,7 +137,8 @@ describe('guard contact (v2 §4)', () => {
     const top = Math.min(...repel.map((l) => l.bottom));
     expect(start - top).toBeGreaterThan(35.5);
     expect(start - top).toBeLessThan(36.5);
-    for (let i = 1; i < log.length; i++) expect(Math.abs(log[i].bottom - log[i - 1].bottom)).toBeLessThan(10);
+    const guarded = log.filter((l) => l.phase !== 'OFF');
+    for (let i = 1; i < guarded.length; i++) expect(Math.abs(guarded[i].bottom - guarded[i - 1].bottom)).toBeLessThan(10);
     const repelMs = log.filter((l) => l.phase === 'REPEL').length * DT * 1000;
     expect(repelMs).toBeGreaterThan(150); expect(repelMs).toBeLessThan(190);
   });

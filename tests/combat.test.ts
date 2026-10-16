@@ -86,7 +86,7 @@ describe('lives, pause and restart', () => {
     expect(s.lives).toBe(2);
     for (let t = 0; t < 12 && s.phase !== 'GAME_OVER'; t += DT) {
       if (s.building && s.phase === 'PLAYING') s.building.bottomY = Math.max(s.building.bottomY, DANGER_Y - 1);
-      tick(s, DT);
+      tick(s, DT, { ...NO_INPUT, attackPressed: s.phase === 'BURIED' }); // break out each time
     }
     expect(s.lives).toBe(0);
     expect(s.phase).toBe('GAME_OVER');

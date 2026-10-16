@@ -3,12 +3,12 @@
 // hit-stop) and the v3.0 contact patch: attacks and guards resolve only on real, swept contact between the pose's
 // visible surface and the lowest floor's underside, through one combat resolver (special → guard → attack → crush).
 // v4 hotfix: unlimited guard (held or pressed, always succeeds on real contact), a crush is one life and a clean
-// DAMAGE_IMPACT → RECOVER sequence, absolute per-tier fall speeds, and a bottom-to-top special sweep.
+// BURIED → (Z) → ESCAPE sequence, absolute per-tier fall speeds, and a bottom-to-top special sweep.
 import { BALANCE, comboMultiplier, DANGER_Y, GROUND_Y, specialGain, tierFor } from '../config/balance';
 import { ATTACK_FEEL, CONTACT, GUARD_FEEL, HITSTOP_MS, JUMP_FEEL, SPECIAL_SEQ } from '../config/gameFeel';
-import { hitFloor, spawnBuilding, type FallingBuilding, type Floor, type Lane } from './building';
+import { hitFloor, spawnBottom, spawnBuilding, type FallingBuilding, type Floor, type Lane } from './building';
 
-export type Phase = 'BOOT' | 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'DAMAGE_IMPACT' | 'RECOVER' | 'PAUSED' | 'GAME_OVER' | 'SPECIAL' | 'WAVE_TRANSITION';
+export type Phase = 'BOOT' | 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'BURIED' | 'ESCAPE' | 'PAUSED' | 'GAME_OVER' | 'SPECIAL' | 'WAVE_TRANSITION';
 /** OFF (↓ only raises the blade) → HOLD → REPEL → RELEASE → OFF. No gauge, no timeout, no lock (v4 §3). */
 export type GuardPhase = 'OFF' | 'HOLD' | 'REPEL' | 'RELEASE';
 /** Who writes the building's y this tick (exactly one). */
@@ -38,8 +38,10 @@ export type GameEvent =
   | { t: 'guardRepel'; kind: 'ground' | 'air' }
   | { t: 'guardRelease' }
   | { t: 'lifeLost'; livesLeft: number }
-  | { t: 'crushed'; floors: Floor[]; bottomY: number; landmarkId: string; air: boolean }
-  | { t: 'recover' }
+  | { t: 'crushed'; bottomY: number; landmarkId: string; air: boolean }
+  | { t: 'buried' } // the building has slammed onto the ground: the hero is under it
+  | { t: 'buriedBreak'; floor: Floor; bottomY: number; landmarkId: string; last: boolean }
+  | { t: 'escaped' }
   | { t: 'special'; floors: number; bottomY: number; topY: number; landmarkId: string; score: number; clutch: boolean }
   | { t: 'specialSlash'; floor: Floor; bottomY: number; index: number; total: number; landmarkId: string }
   | { t: 'specialFinish'; topY: number; landmarkId: string }
@@ -151,6 +153,8 @@ export interface RunState {
   guardPressedThisTick: boolean;
   damageSequences: number;
   specialSeq: SpecialSeq | null;
+  buried: { elapsedMs: number; fromY: number } | null;
+  escape: { elapsedMs: number; fromY: number; toY: number } | null;
   lastGuardAtMs: number;
   swingIds: number;
   contact: ContactDebug;
@@ -174,7 +178,7 @@ export function newRun(seed: number): RunState {
   return {
     phase: 'TITLE', pausedFrom: null, phaseMs: 0, timeMs: 0, seed, buildingIndex: 0, destroyedBuildings: 0,
     recentLandmarks: [], building: null, lives: BALANCE.lives, score: 0, combo: 0, comboMs: 0, maxCombo: 0,
-    special: 0, guardPhase: 'OFF', guardContact: null, guardHeld: false, guardPressedThisTick: false, damageSequences: 0, specialSeq: null,
+    special: 0, guardPhase: 'OFF', guardContact: null, guardHeld: false, guardPressedThisTick: false, damageSequences: 0, specialSeq: null, buried: null, escape: null,
     guardContacts: 0, lastGuardAtMs: -1e9, swingIds: 0, contact: { attackGap: NaN, guardGap: NaN, toi: null, xOverlap: false, lastEvent: '', contactId: '' }, invulnMs: 0, freezeMs: 0, dangerWarned: '', chainLane: -1, chainCount: 0,
     player: newPlayer(), events: [], countdown: 3,
   };
@@ -492,6 +496,13 @@ function clampUnderBuilding(s: RunState) {
   if (p.y > maxY) { p.y = maxY; if (p.vy > 0) p.vy = 0; }
 }
 
+/** Feet height at which the blade would touch the current building's underside (0 if there is none on screen). */
+function jumpReachToBuilding(s: RunState) {
+  const b = s.building;
+  if (!b || b.defeated || b.collisionDisabled || !b.floors.length || b.bottomY < 0) return 0;
+  return Math.max(0, DANGER_Y - CONTACT.attackReachAboveHead - b.bottomY);
+}
+
 /** v2 §3: ~204 wu full jump, fast fall, short hop on an early release, jump buffer. */
 function updateJump(s: RunState, dt: number, input: Intents) {
   const p = s.player;
@@ -504,9 +515,13 @@ function updateJump(s: RunState, dt: number, input: Intents) {
   if (s.guardPhase === 'HOLD' && s.guardContact?.kind === 'air') return;
 
   if (p.y <= 0 && p.vy <= 0 && p.jumpBufferMs > 0) {
-    p.vy = JUMP_FEEL.jumpVelocity;
-    p.jumpElapsed = 0; p.jumpCut = false; p.peakY = 0; p.jumpBufferMs = 0;
-    s.events.push({ t: 'jump', full: input.jump });
+    // no height limit but the building itself: with a building on screen above, the leap is always strong enough to
+    // bring the blade right up to its underside (wherever it is); otherwise the normal ~204 wu jump
+    const need = jumpReachToBuilding(s);
+    const homing = need > 0; // a building on screen above: every jump reaches it (tap or hold)
+    p.vy = Math.max(JUMP_FEEL.jumpVelocity, homing ? Math.sqrt(2 * JUMP_FEEL.gravityAscending * (need + JUMP_FEEL.homingOvershoot)) : 0);
+    p.jumpElapsed = 0; p.jumpCut = homing; p.peakY = 0; p.jumpBufferMs = 0; // short hops only with open sky above
+    s.events.push({ t: 'jump', full: input.jump || homing });
   }
   if (p.y > 0 || p.vy > 0) {
     p.jumpElapsed += dt;
@@ -639,27 +654,28 @@ export function motionOwner(s: RunState): MotionOwner {
   const b = s.building;
   if (!b || b.defeated) return 'NONE';
   if (s.phase === 'SPECIAL') return 'SPECIAL_SEQUENCE';
-  if (s.phase === 'DAMAGE_IMPACT' || s.phase === 'RECOVER') return 'DAMAGE_SEQUENCE';
+  if (s.phase === 'BURIED' || s.phase === 'ESCAPE') return 'DAMAGE_SEQUENCE';
   if (s.guardPhase === 'HOLD') return 'GUARD_HOLD';
   if (s.guardPhase === 'REPEL') return 'GUARD_REPEL';
   if (s.guardPhase === 'RELEASE') return 'GUARD_RELEASE';
   return 'FALLING';
 }
 
-/** Crush (only when no special, guard or hit resolved it): one life, then DAMAGE_IMPACT → RECOVER (v4 §2). */
+/**
+ * Crush (only when no special, guard or hit resolved it): one life, and the building slams down onto the ground with
+ * the hero completely buried under it. Pressing attack breaks the floor on top of them and the building is blasted
+ * high back up; then play goes on. With no lives left it is GAME OVER.
+ */
 function resolveCrush(s: RunState) {
   const b = s.building;
   if (!b || b.defeated || b.collisionDisabled || s.phase !== 'PLAYING' || bracing(s)) return;
   // warn once when the building would reach the hero within 0.25 s
   if (s.dangerWarned !== b.id && !s.player.guarding && b.velocityY > 0 && (DANGER_Y - b.bottomY) / b.velocityY < 0.25) { s.dangerWarned = b.id; s.events.push({ t: 'danger' }); }
   if (b.bottomY < DANGER_Y) return;
-  // lock first: nothing in this or a later tick can hit, guard or crush with this building again
-  s.phase = 'DAMAGE_IMPACT';
-  s.phaseMs = BALANCE.damageImpactMs;
-  b.collisionDisabled = true;
+  // lock first: nothing in this or a later tick can hit, guard or crush again until the escape
+  s.phase = 'BURIED';
+  s.buried = { elapsedMs: 0, fromY: b.bottomY };
   b.velocityY = 0;
-  const floors = b.floors.splice(0);
-  b.defeated = true;
   if (s.invulnMs <= 0) {
     s.lives = Math.max(0, s.lives - 1);
     s.invulnMs = BALANCE.invulnAfterHitMs;
@@ -668,29 +684,57 @@ function resolveCrush(s: RunState) {
   s.damageSequences += 1;
   breakCombo(s);
   endGuard(s);
-  s.player.swing = null;
-  s.player.bufferedAttackMs = 0;
+  const p = s.player;
+  p.swing = null; p.bufferedAttackMs = 0; p.guarding = false; p.attackAnimMs = 0;
+  p.y = 0; p.vy = 0; p.laneFrom = p.lane; p.laneAnimMs = 0;
   s.contact.lastEvent = 'CRUSH';
-  s.events.push({ t: 'crushed', floors, bottomY: DANGER_Y, landmarkId: b.landmarkId, air: s.player.y > 0 });
+  s.events.push({ t: 'crushed', bottomY: b.bottomY, landmarkId: b.landmarkId, air: false });
 }
 
-/** The hero is put back on safe ground in their lane; then the next building (or game over). */
-function updateDamage(s: RunState, ms: number) {
-  s.phaseMs -= ms;
-  if (s.phaseMs > 0) return;
-  if (s.phase === 'DAMAGE_IMPACT') {
-    const p = s.player;
-    p.y = 0; p.vy = 0; p.laneFrom = p.lane; p.laneAnimMs = 0; p.guarding = false; p.swing = null; p.attackAnimMs = 0;
-    s.phase = 'RECOVER';
-    s.phaseMs = BALANCE.damageRecoverMs;
-    s.events.push({ t: 'recover' });
+const easeOut = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+
+/** BURIED: the building slams to the ground over the hero, then waits for an attack press to break out. */
+function updateBuried(s: RunState, ms: number, input: Intents) {
+  const b = s.building, q = s.buried;
+  if (!b || !q) { s.phase = 'PLAYING'; return; }
+  q.elapsedMs += ms;
+  const slam = Math.min(1, q.elapsedMs / BALANCE.buriedSlamMs);
+  b.bottomY = lerp(q.fromY, GROUND_Y, slam * slam);
+  if (slam >= 1 && q.elapsedMs - ms < BALANCE.buriedSlamMs) s.events.push({ t: 'buried' });
+  if (s.lives <= 0) {
+    if (q.elapsedMs >= BALANCE.gameOverAfterMs) { s.phase = 'GAME_OVER'; s.building = null; s.buried = null; s.events.push({ t: 'gameOver', score: s.score }); }
     return;
   }
-  if (s.lives <= 0) {
-    s.phase = 'GAME_OVER';
-    s.building = null;
-    s.events.push({ t: 'gameOver', score: s.score });
-  } else nextBuilding(s);
+  if (input.attackPressed) s.player.bufferedAttackMs = CONTACT.attackBufferMs;
+  if (q.elapsedMs < BALANCE.buriedMinMs || s.player.bufferedAttackMs <= 0) return;
+  // break out: the floor on top of the hero is smashed and the rest is blasted back up
+  s.player.bufferedAttackMs = 0;
+  s.player.attackAnimMs = BALANCE.attackAnimMs;
+  const floor = b.floors.shift()!;
+  b.bottomY -= floor.height;
+  const last = b.floors.length === 0;
+  s.events.push({ t: 'buriedBreak', floor, bottomY: GROUND_Y, landmarkId: b.landmarkId, last });
+  s.buried = null;
+  if (last) { b.defeated = true; s.invulnMs = 0; nextBuilding(s); return; } // nothing left above: next building
+  s.phase = 'ESCAPE';
+  s.escape = { elapsedMs: 0, fromY: b.bottomY, toY: spawnBottom(b.baseSpeed, tierFor(s.destroyedBuildings).ttc) };
+}
+
+/** ESCAPE: the building flies back up (eased, one writer), then falls again from its spawn height. */
+function updateEscape(s: RunState, ms: number) {
+  const b = s.building, e = s.escape;
+  if (!b || !e) { s.phase = 'PLAYING'; return; }
+  e.elapsedMs += ms;
+  const k = Math.min(1, e.elapsedMs / BALANCE.escapeLaunchMs);
+  b.bottomY = lerp(e.fromY, e.toY, easeOut(k));
+  b.velocityY = 0;
+  if (k >= 1) {
+    s.escape = null;
+    s.invulnMs = 0; // a new fall is a new collision
+    s.dangerWarned = '';
+    s.phase = 'PLAYING';
+    s.events.push({ t: 'escaped' });
+  }
 }
 
 /** One fixed simulation step (dt seconds). Input is applied only while PLAYING. */
@@ -730,10 +774,13 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
       updateJump(s, dt, input);
       updateSpecial(s, ms);
       return;
-    case 'DAMAGE_IMPACT':
-    case 'RECOVER':
-      // no input, no physics, no hits: the crush is being resolved
-      updateDamage(s, ms);
+    case 'BURIED':
+      // the hero is under the building: only an attack press (to break out) does anything
+      updateBuried(s, ms, input);
+      return;
+    case 'ESCAPE':
+      updateLanes(s, ms, input);
+      updateEscape(s, ms);
       return;
     case 'PLAYING': break;
   }

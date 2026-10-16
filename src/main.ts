@@ -269,21 +269,29 @@ function onEvent(e: GameEvent) {
     case 'guardRelease': break;
     case 'danger': effects.danger = 1; audio.play('danger'); break;
     case 'lifeLost': effects.red = 1; kick(CAMERA_FEEL.damage, 0, 1); audio.play('hurt'); break;
-    case 'crushed': {
-      // v4 §2: the building that crushed the hero collapses at once (collision is already off) — dust, debris, a thud
-      let bottom = e.bottomY;
-      const v = visual;
-      e.floors.slice(0, 6).forEach((f, i) => {
-        const bb = bottom, fv = v?.floors.get(f.id);
-        bottom -= f.height;
-        const r = floorWorldRect(bb, f.height);
-        if (fv) pendingBursts.push({ at: effectClock + i * 25, fn: () => fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, material, lx, 0.8) });
-      });
-      fx.smoke(lx, GROUND_Y, 10, 'rgba(232,222,204,', 1.1);
+    case 'crushed': kick(CAMERA_FEEL.damage, 0, 1); break;
+    case 'buried': {
+      // the building has slammed down over the hero: dust, a heavy thud, and the way out
+      fx.smoke(lx, GROUND_Y, 12, 'rgba(232,222,204,', 1.2);
+      kick(CAMERA_FEEL.building, 0, 1);
       audio.play('stone'); audio.play('crumble');
+      if (state.lives > 0) showHint(t('escapeHint'), 1600);
       break;
     }
-    case 'recover': fx.smoke(lx, GROUND_Y, 4, 'rgba(232,222,204,', 0.8); break;
+    case 'buriedBreak': {
+      // Z from under the rubble: the floor on top of the hero bursts and the building is blasted back up
+      $('hint').classList.add('hidden');
+      const fv = visual?.floors.get(e.floor.id);
+      const r = floorWorldRect(e.bottomY, e.floor.height);
+      if (fv) fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, material, lx, 1.3);
+      fx.ring(lx, GROUND_Y - 30, 150, 'rgba(255,240,180,.95)', 0.35, 9, 0.35);
+      fx.sparks(lx, GROUND_Y - 40, 14, ['#ffffff', '#fff3b0']);
+      kick(CAMERA_FEEL.floor, 0, -1);
+      audio.play(material); audio.play('ultBoom');
+      banners.offer(lang === 'ko' ? '탈출!' : 'BREAK OUT!', P.CLUTCH, '#8ff0ff', 32, 0.6);
+      break;
+    }
+    case 'escaped': break;
     case 'speedUp': banners.offer('SPEED UP!', P.CHAIN, '#ff9a62', 28, 0.5); break;
     case 'specialReady': audio.play('gaugeFull'); banners.offer('SPECIAL READY', P.NORMAL, '#ffcc33', 26); break;
     case 'combo': {
