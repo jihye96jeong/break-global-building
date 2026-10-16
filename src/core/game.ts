@@ -861,14 +861,19 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
         if (n !== s.countdown) { s.countdown = n; s.events.push({ t: 'countdown', n }); }
       }
       if (s.phaseMs <= 0) nextBuilding(s);
-      updateLanes(s, ms, input);
-      updateJump(s, dt, input);
+      updateJump(s, dt, NO_INPUT); // no moving, jumping or attacking until the game has started
       return;
     }
     case 'WAVE_TRANSITION':
       s.phaseMs -= ms; // combo timer is frozen here
       s.freezeMs = Math.max(0, s.freezeMs - ms);
       p.swing = null;
+      if (s.buildingIndex <= 1) {
+        // before the very first building starts falling the game has not begun: the hero stands still
+        updateJump(s, dt, NO_INPUT);
+        if (s.phaseMs <= 0 && s.player.y <= 0) s.phase = 'PLAYING';
+        return;
+      }
       updateLanes(s, ms, input);
       // the next building waits for the hero to land, so ↑ does not launch here (a press is still buffered)
       updateJump(s, dt, { ...input, jump: false, jumpPressed: false });

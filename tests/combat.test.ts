@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DANGER_Y } from '../src/config/balance';
-import { attack, newRun, NO_INPUT, pause, resume, special, startRun, takeEvents, tick } from '../src/core/game';
+import { attack, newRun, NO_INPUT, pause, resume, special, startRun, startStoryRun, takeEvents, tick } from '../src/core/game';
 import { building, floor, playing } from './helpers';
 
 const DT = 1 / 60;
@@ -116,6 +116,24 @@ describe('lives, pause and restart', () => {
     s.score = 999; s.lives = 0; s.special = 80; s.combo = 9; s.damageSequences = 2;
     startRun(s, 2);
     expect([s.lives, s.score, s.special, s.combo, s.damageSequences, s.phase]).toEqual([3, 0, 0, 0, 0, 'COUNTDOWN']);
+  });
+
+  it('the hero cannot move, jump or attack until the game has started (intro / countdown / first card)', () => {
+    for (const story of [false, true]) {
+      const s = newRun(1);
+      if (story) startStoryRun(s, 1, 5); else startRun(s);
+      const lane = s.player.lane;
+      let ev: string[] = [];
+      while (s.phase !== 'PLAYING') {
+        tick(s, DT, { ...NO_INPUT, left: true, leftPressed: true, jump: true, jumpPressed: true, attack: true, attackPressed: true, guard: true, guardPressed: true });
+        ev = ev.concat(takeEvents(s).map((e) => e.t));
+        expect([s.player.lane, s.player.y, s.player.guarding]).toEqual([lane, 0, false]);
+      }
+      expect(ev).not.toContain('swing');
+      expect(ev).not.toContain('jump');
+      tick(s, DT, { ...NO_INPUT, leftPressed: true });
+      expect(s.player.lane).toBe(lane - 1); // and from the first playing tick on, it all works
+    }
   });
 
   it('the countdown hands over to the first building within about a second', () => {
