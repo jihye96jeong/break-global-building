@@ -677,6 +677,24 @@ describe('STICK — the hero never hangs on the underside', () => {
     expect(t).toBeLessThan(0.25); // and straight back down
   });
 
+  it('STICK-04 ↑ while dropping after an air guard: straight back up at full strength, no landing first', () => {
+    const s = playing(building(tall(6)));
+    const b = s.building!;
+    s.player.y = 150;
+    b.bottomY = guardPlaneY(s); b.baseSpeed = b.velocityY = 200;
+    step(s, { guard: true, guardPressed: true });
+    step(s); step(s);
+    expect(s.player.vy).toBeLessThan(0); // knocked down
+    const y0 = s.player.y;
+    expect(y0).toBeGreaterThan(0);
+    step(s, { jump: true, jumpPressed: true });
+    expect(s.player.vy).toBeGreaterThanOrEqual(JUMP_FEEL.jumpVelocity - JUMP_FEEL.gravityAscending * DT - 1);
+    let i = 0;
+    while (!s.player.clinging && i++ < 30) { step(s, { jump: true }); expect(s.player.y).toBeGreaterThan(0); }
+    expect(s.player.clinging).toBe(true); // back on the underside without touching the ground
+    expect(i * DT).toBeLessThan(0.2);
+  });
+
   it('STICK-02 ↓ held but the guard already used: touching the building drops the hero at once', () => {
     const s = playing(building(tall(6), 300));
     const b = s.building!;

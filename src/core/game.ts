@@ -295,7 +295,8 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** While the guard holds, pushes or releases the building, it alone moves the building (single writer). */
 const guardOwnsBuilding = (s: RunState) => s.guardPhase === 'HOLD' || s.guardPhase === 'REPEL' || s.guardPhase === 'RELEASE';
-const bracing = (s: RunState) => s.guardPhase === 'HOLD' || s.guardPhase === 'REPEL';
+/** the hero is braced under the building (ground guard only: an air guard knocks them away at once, free to act) */
+const bracing = (s: RunState) => (s.guardPhase === 'HOLD' || s.guardPhase === 'REPEL') && s.guardContact?.kind !== 'air';
 
 function freeze(s: RunState, ms: number) { s.freezeMs = Math.max(s.freezeMs, ms); }
 
@@ -450,6 +451,8 @@ function applyHit(s: RunState, proof: ContactProof, variant: number) {
   const hpBefore = b.floors[0]?.hp[lane] ?? 0;
   const r = hitFloor(b, lane);
   if (r.kind === 'none') return;
+  // struck straight after an air guard (still pinned or being pushed): the hit takes the building over
+  if (guardOwnsBuilding(s)) { endGuard(s); b.guardSlowMs = GUARD_FEEL.postGuardSlowMs; }
   // the blow does not stop it: it keeps creeping down at the level's pressure speed while you keep hitting
   b.velocityY = pressureOf(b);
   b.pressMs = CONTACT.pressureHoldMs;
@@ -574,7 +577,7 @@ const poseReach = (s: RunState) => (s.player.guarding && s.guardPhase === 'OFF' 
 /** Keep an airborne hero's blade from entering the underside: the building is a ceiling and pushes them down. */
 function clampUnderBuilding(s: RunState) {
   const p = s.player, b = s.building;
-  if (!b || b.defeated || bracing(s) || p.y <= 0) return;
+  if (!b || b.defeated || p.y <= 0) return; // (also while bracing: a hero leaping back up stops at the underside)
   const maxY = Math.max(0, DANGER_Y - poseReach(s) - b.bottomY);
   if (p.y >= maxY - 0.001) {
     p.y = maxY; if (p.vy > 0) p.vy = 0;
@@ -624,7 +627,7 @@ function updateJump(s: RunState, dt: number, input: Intents) {
     const need = Math.max(0, jumpReachToBuilding(s) - p.y);
     const homing = need > 0; // a building on screen above: every jump reaches it (tap or hold)
     p.vy = homing ? Math.sqrt(2 * JUMP_FEEL.gravityAscending * (need + JUMP_FEEL.homingOvershoot)) : JUMP_FEEL.jumpVelocity;
-    if (grounded) p.vy = Math.max(JUMP_FEEL.jumpVelocity, p.vy);
+    p.vy = Math.max(JUMP_FEEL.jumpVelocity, p.vy); // from the ground or mid-drop: always a full-strength leap
     if (airLeap) { p.airLeap = false; p.dropping = false; p.landMs = 0; }
     p.jumpElapsed = 0; p.jumpCut = homing; p.peakY = Math.max(0, p.y); p.jumpBufferMs = 0; // short hops only with open sky above
     s.events.push({ t: 'jump', full: input.jump || homing });
