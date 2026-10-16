@@ -29,6 +29,9 @@ export const BALANCE = {
   waveGapMs: 450, // name card between the first buildings…
   waveGapFastMs: 300, // …then a short 0.25–0.40 s handover (v4 §4.4)
   countdownMs: 750, // 3 → 2 → 1
+  stageIntroMs: 950, // v5 level intro card (skippable)
+  finalIntroMs: 600, // v5 FINAL BUILDING card before a level's last wave (physics paused)
+  stageClearDelayMs: 550, // v5 last building down → result screen
   buriedSlamMs: 90, // crushed: the building slams onto the ground over the hero…
   buriedMinMs: 160, // …an attack press after this breaks the floor on top of them…
   escapeLaunchMs: 300, // …and the building is blasted back up to its spawn height over this time

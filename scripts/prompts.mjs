@@ -92,15 +92,33 @@ export const EXTRA_LANDMARKS = {
   },
 };
 
+// v5 story mode: simple fictional starter buildings for levels 1–4 (no real landmark, no signage).
+export const BASIC_BUILDINGS = {
+  basic_shop: { name: 'small two-storey corner shop', city: 'a generic friendly town', aspect: '1:1',
+    detail: 'a cute small two-storey shop building with a striped awning, big ground-floor shop window, flat roof, pastel walls, no letters or signs' },
+  basic_house: { name: 'three-storey town house', city: 'a generic friendly town', aspect: '2:3',
+    detail: 'a narrow three-storey town house with a pitched tiled roof, a chimney, small balconies and flower boxes, warm pastel facade' },
+  basic_office: { name: 'low modern office block', city: 'a generic city', aspect: '2:3',
+    detail: 'a simple five-storey office block with even rows of blue glass windows, concrete frame, flat roof with a small rooftop unit' },
+  basic_apartment: { name: 'mid-rise apartment block', city: 'a generic city', aspect: '1:2',
+    detail: 'a seven-storey apartment block with repeating balconies, small plants, air-conditioner boxes, flat roof with a water tank' },
+  basic_clocktower: { name: 'town clock tower', city: 'a generic old town', aspect: '1:2',
+    detail: 'a slender brick town clock tower with a big round clock face near the top (no numbers), a small arched belfry and a pointed copper roof' },
+};
+
 // Generic skies for the endless mode, chosen per landmark (day / sunset / night).
 export const SKIES = {
   sky_day: 'a bright daytime sky with soft white clouds over a distant generic low city skyline',
   sky_sunset: 'a warm orange and pink sunset sky with long soft clouds over a distant generic low city skyline silhouette',
   sky_night: 'a deep blue night sky with stars and a big moon over a distant generic low city skyline with tiny lit windows',
+  // v5 story mode time-of-day plates
+  sky_golden: 'a warm golden late-afternoon sky, low sun behind thin clouds, long soft light over a distant generic low city skyline',
+  sky_twilight: 'a purple and pink twilight sky just after sunset, the first stars, distant generic low city skyline with a few lit windows',
+  sky_deepnight: 'a very dark navy deep-night sky full of stars and a pale moon, faint distant lightning glow on the horizon, distant generic city skyline with many tiny lit windows',
 };
 
 export function buildingPrompt(id) {
-  const l = LANDMARKS[id] ?? EXTRA_LANDMARKS[id];
+  const l = LANDMARKS[id] ?? EXTRA_LANDMARKS[id] ?? BASIC_BUILDINGS[id];
   return `${STYLE_ANCHOR}\nA SINGLE iconic, instantly recognizable ${l.name} in ${l.city}: ${l.detail}. ` +
     'Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, ' +
     'all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. ' +
@@ -166,6 +184,9 @@ export function allJobs() {
   }
   for (const id of Object.keys(EXTRA_LANDMARKS)) {
     jobs.push({ id, type: 'building', prompt: buildingPrompt(id), aspect: EXTRA_LANDMARKS[id].aspect, resolution: '2k', quality: 'medium' });
+  }
+  for (const id of Object.keys(BASIC_BUILDINGS)) {
+    jobs.push({ id, type: 'building', prompt: buildingPrompt(id), aspect: BASIC_BUILDINGS[id].aspect, resolution: '1k', quality: 'medium' });
   }
   for (const [id, scene] of Object.entries(SKIES)) {
     jobs.push({ id, type: 'background', aspect: '16:9', resolution: '2k', quality: 'medium',

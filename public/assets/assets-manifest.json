@@ -462,6 +462,20 @@
       "source": "art-source/character/ninja_hurt.webp",
       "bytes": 228237,
       "success": true
+    },
+    "building:basic_shop": {
+      "id": "basic_shop",
+      "type": "building",
+      "model": "grok-imagine-image-2.0",
+      "mode": "generate",
+      "prompt": "Original 2D side-view arcade game illustration, joyful early-2000s browser-game energy, clean thick dark outlines, expressive shapes, flat cel-shaded colors with subtle highlights, crisp readable silhouette, painterly charm but no photorealism, no 3D render, no realistic disaster, no injuries, no people, no weapons, no logos, no UI, no captions, no words, consistent visual style across a world-tour game.\nA SINGLE iconic, instantly recognizable small two-storey corner shop in a generic friendly town: a cute small two-storey shop building with a striped awning, big ground-floor shop window, flat roof, pastel walls, no letters or signs. Show the complete landmark from its base to its highest point, full front-facing or slightly elevated orthographic game view, all architectural parts visible, centered with generous clean margins and a clearly readable silhouette. This is a clean isolated building SPRITE intended for procedural destruction. Solid flat vivid magenta (#FF00FF) chroma key studio background, uniform color, no gradient, no clouds, no scenery, no ground, no cast shadow, no adjacent buildings, no text, no watermark, no floating objects. Keep the building recognizable and coherent, simplified into colorful arcade shapes. The building must not contain any magenta or pink colour.",
+      "aspect_ratio": "1:1",
+      "resolution": "1k",
+      "quality": "medium",
+      "generatedAt": "2026-10-16T03:34:18.855Z",
+      "source": "art-source/building/basic_shop.jpg",
+      "bytes": 199203,
+      "success": true
     }
   },
   "note": "art-source files were re-encoded to WebP (buildings/characters lossless) after download to keep the repo small"

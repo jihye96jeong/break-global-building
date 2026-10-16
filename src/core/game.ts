@@ -7,8 +7,10 @@
 import { BALANCE, comboMultiplier, DANGER_Y, GROUND_Y, specialGain, tierFor } from '../config/balance';
 import { ATTACK_FEEL, CONTACT, GUARD_FEEL, HITSTOP_MS, JUMP_FEEL, SPECIAL_SEQ } from '../config/gameFeel';
 import { hitFloor, spawnBottom, spawnBuilding, type FallingBuilding, type Floor, type Lane } from './building';
+import { cloneWave, createStageWaves } from '../story/generator';
+import { stageFor, type StoryStage } from '../story/stages';
 
-export type Phase = 'BOOT' | 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'BURIED' | 'ESCAPE' | 'PAUSED' | 'GAME_OVER' | 'SPECIAL' | 'WAVE_TRANSITION';
+export type Phase = 'BOOT' | 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'BURIED' | 'ESCAPE' | 'STAGE_CLEAR' | 'PAUSED' | 'GAME_OVER' | 'SPECIAL' | 'WAVE_TRANSITION';
 /** OFF (↓ only raises the blade) → HOLD → REPEL → RELEASE → OFF. No gauge, no timeout, no lock (v4 §3). */
 export type GuardPhase = 'OFF' | 'HOLD' | 'REPEL' | 'RELEASE';
 /** Who writes the building's y this tick (exactly one). */
@@ -46,6 +48,8 @@ export type GameEvent =
   | { t: 'specialSlash'; floor: Floor; bottomY: number; index: number; total: number; landmarkId: string }
   | { t: 'specialFinish'; topY: number; landmarkId: string }
   | { t: 'speedUp'; tier: number; fallSpeed: number }
+  | { t: 'stageClear'; level: number; score: number; maxCombo: number; livesLeft: number; attemptId: string }
+  | { t: 'stageFailed'; level: number; wavesCleared: number; waveCount: number; maxCombo: number; score: number }
   | { t: 'specialReady' }
   | { t: 'combo'; combo: number }
   | { t: 'jump'; full: boolean }
@@ -133,7 +137,20 @@ export interface SpecialSeq {
   pending: GameEvent | null; // the 'building' event, emitted at the finish
 }
 
+/** v5 story run: which level, which wave, and the waves generated once for this attempt. */
+export interface StoryRun {
+  level: number;
+  waveIndex: number; // 0-based: the wave now being played
+  wavesCleared: number;
+  waveCount: number;
+  attemptId: string;
+  waves: FallingBuilding[];
+  instance: number; // copies spawned (a wave can come again after a crush)
+}
+
 export interface RunState {
+  mode: 'endless' | 'story';
+  story: StoryRun | null;
   phase: Phase;
   pausedFrom: Phase | null;
   phaseMs: number; // time left in a timed phase
@@ -179,13 +196,29 @@ export function newPlayer(): PlayerState {
 
 export function newRun(seed: number): RunState {
   return {
-    phase: 'TITLE', pausedFrom: null, phaseMs: 0, timeMs: 0, seed, buildingIndex: 0, destroyedBuildings: 0,
+    mode: 'endless', story: null, phase: 'TITLE', pausedFrom: null, phaseMs: 0, timeMs: 0, seed, buildingIndex: 0, destroyedBuildings: 0,
     recentLandmarks: [], building: null, lives: BALANCE.lives, score: 0, combo: 0, comboMs: 0, maxCombo: 0,
     special: 0, guardPhase: 'OFF', guardContact: null, guardHeld: false, guardPressedThisTick: false, damageSequences: 0, specialSeq: null, buried: null, escape: null,
     guardContacts: 0, lastGuardAtMs: -1e9, swingIds: 0, contact: { attackGap: NaN, guardGap: NaN, toi: null, xOverlap: false, lastEvent: '', contactId: '' }, invulnMs: 0, freezeMs: 0, dangerWarned: '', chainLane: -1, chainCount: 0,
     player: newPlayer(), events: [], countdown: 3,
   };
 }
+
+/** v5: start (or retry) a story level — 3 lives, empty special, waves generated once for this attempt. */
+export function startStoryRun(s: RunState, level: number, seed: number) {
+  const stage = stageFor(level);
+  Object.assign(s, newRun(seed));
+  s.mode = 'story';
+  s.story = { level, waveIndex: 0, wavesCleared: 0, waveCount: stage.waveCount, attemptId: `L${level}:${seed}`, waves: createStageWaves(stage, seed), instance: 0 };
+  s.phase = 'COUNTDOWN'; // the level intro card (skippable)
+  s.phaseMs = BALANCE.stageIntroMs;
+  s.countdown = 0;
+}
+
+/** Skip the level intro / countdown. */
+export function skipIntro(s: RunState) { if (s.phase === 'COUNTDOWN') s.phaseMs = Math.min(s.phaseMs, 1); }
+
+export const storyStage = (s: RunState): StoryStage | null => (s.story ? stageFor(s.story.level) : null);
 
 /** Title → countdown → first building. Everything except best scores is reset. */
 export function startRun(s: RunState, seed = s.seed) {
@@ -260,7 +293,9 @@ function endGuard(s: RunState) {
 function nextBuilding(s: RunState) {
   const prevTier = s.building?.tier ?? 1;
   s.buildingIndex += 1;
-  const b = spawnBuilding(s.seed, s.buildingIndex, s.destroyedBuildings, s.recentLandmarks);
+  const st = s.story;
+  // story: the pre-generated wave for this slot (a fresh copy if it has to come again); endless: the tier tables
+  const b = st ? cloneWave(st.waves[st.waveIndex], st.instance++) : spawnBuilding(s.seed, s.buildingIndex, s.destroyedBuildings, s.recentLandmarks);
   s.recentLandmarks = [...s.recentLandmarks, b.landmarkId].slice(-2);
   s.building = b;
   s.chainLane = -1; s.chainCount = 0;
@@ -268,8 +303,30 @@ function nextBuilding(s: RunState) {
   s.specialSeq = null;
   s.phase = 'WAVE_TRANSITION';
   s.phaseMs = s.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs;
+  if (st && st.waveIndex === st.waveCount - 1 && stageFor(st.level).finalIntro) s.phaseMs = BALANCE.finalIntroMs; // FINAL BUILDING card (physics paused)
   s.events.push({ t: 'wave', building: b });
-  if (b.tier > prevTier) s.events.push({ t: 'speedUp', tier: b.tier, fallSpeed: b.baseSpeed });
+  if (!st && b.tier > prevTier) s.events.push({ t: 'speedUp', tier: b.tier, fallSpeed: b.baseSpeed });
+}
+
+/** After a building is fully destroyed: the next one, or (story) the stage clear once every wave is down. */
+function afterBuilding(s: RunState) {
+  const st = s.story;
+  if (st && st.wavesCleared >= st.waveCount) {
+    s.phase = 'STAGE_CLEAR';
+    s.phaseMs = BALANCE.stageClearDelayMs; // let the debris / special finish play out
+    s.building = null;
+    return;
+  }
+  nextBuilding(s);
+}
+
+function endRun(s: RunState) {
+  s.phase = 'GAME_OVER';
+  s.building = null;
+  s.buried = null;
+  const st = s.story;
+  if (st) s.events.push({ t: 'stageFailed', level: st.level, wavesCleared: st.wavesCleared, waveCount: st.waveCount, maxCombo: s.maxCombo, score: s.score });
+  s.events.push({ t: 'gameOver', score: s.score });
 }
 
 function addScore(s: RunState, n: number) {
@@ -299,6 +356,7 @@ function buildingCleared(s: RunState, b: FallingBuilding, aerial: boolean, emit 
     + (b.elite ? BALANCE.eliteBonus : 0);
   addScore(s, bonus);
   s.destroyedBuildings += 1;
+  if (s.story) { s.story.wavesCleared += 1; s.story.waveIndex = Math.min(s.story.waveCount - 1, s.story.waveIndex + 1); }
   const e: GameEvent = { t: 'building', building: b, bonus, elite: b.elite, aerial };
   if (emit) s.events.push(e);
   return e;
@@ -394,7 +452,7 @@ function applyHit(s: RunState, proof: ContactProof, variant: number) {
   if (r.buildingCleared) {
     freeze(s, HITSTOP_MS.building);
     buildingCleared(s, b, aerial);
-    nextBuilding(s);
+    afterBuilding(s);
   } else {
     b.settleMs = CONTACT.postBreakSettleMs;
     freeze(s, HITSTOP_MS.floor);
@@ -445,7 +503,7 @@ const easeOutCubic = (t: number) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t))
 /** Charge → sweep (floors burst as the slash passes their middle) → top finish + impact stop → quick return. */
 function updateSpecial(s: RunState, ms: number) {
   const q = s.specialSeq, b = s.building;
-  if (!q || !b) { nextBuilding(s); return; }
+  if (!q || !b) { afterBuilding(s); return; }
   q.elapsedMs += ms;
   const t = (q.elapsedMs - SPECIAL_SEQ.chargeMs) / q.sweepMs;
   q.slashY = q.elapsedMs < SPECIAL_SEQ.chargeMs ? q.startY : lerp(q.startY, q.endY, easeOutCubic(t));
@@ -465,7 +523,7 @@ function updateSpecial(s: RunState, ms: number) {
   const end = SPECIAL_SEQ.chargeMs + q.sweepMs + SPECIAL_SEQ.finishStopMs + SPECIAL_SEQ.returnMs;
   if (q.finished && q.elapsedMs >= end) {
     if (s.combo > 0) s.comboMs = BALANCE.comboWindowMs;
-    nextBuilding(s);
+    afterBuilding(s);
   }
 }
 
@@ -722,7 +780,7 @@ function updateBuried(s: RunState, ms: number, input: Intents) {
   if (input.attackPressed) s.player.bufferedAttackMs = CONTACT.attackBufferMs;
   if (s.lives <= 0) {
     // no lives left: the attack press ends the run (nothing else, and no timer, ever does)
-    if (q.elapsedMs >= BALANCE.buriedMinMs && s.player.bufferedAttackMs > 0) { s.phase = 'GAME_OVER'; s.building = null; s.buried = null; s.events.push({ t: 'gameOver', score: s.score }); }
+    if (q.elapsedMs >= BALANCE.buriedMinMs && s.player.bufferedAttackMs > 0) endRun(s);
     return;
   }
   if (q.elapsedMs < BALANCE.buriedMinMs || s.player.bufferedAttackMs <= 0) return;
@@ -734,7 +792,8 @@ function updateBuried(s: RunState, ms: number, input: Intents) {
   const last = b.floors.length === 0;
   s.events.push({ t: 'buriedBreak', floor, bottomY: GROUND_Y, landmarkId: b.landmarkId, last });
   s.buried = null;
-  if (last) { b.defeated = true; s.invulnMs = 0; nextBuilding(s); return; } // nothing left above: next building
+  // nothing left above: endless moves on; story brings the same wave again (a crushed wave is never counted as cleared)
+  if (last) { b.defeated = true; s.invulnMs = 0; nextBuilding(s); return; }
   s.phase = 'ESCAPE';
   s.escape = { elapsedMs: 0, fromY: b.bottomY, toY: spawnBottom(b.baseSpeed, tierFor(s.destroyedBuildings).ttc) };
 }
@@ -770,8 +829,10 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
   switch (s.phase) {
     case 'COUNTDOWN': {
       s.phaseMs -= ms;
-      const n = Math.max(1, Math.ceil((s.phaseMs / BALANCE.countdownMs) * 3));
-      if (n !== s.countdown) { s.countdown = n; s.events.push({ t: 'countdown', n }); }
+      if (s.mode === 'endless') {
+        const n = Math.max(1, Math.ceil((s.phaseMs / BALANCE.countdownMs) * 3));
+        if (n !== s.countdown) { s.countdown = n; s.events.push({ t: 'countdown', n }); }
+      }
       if (s.phaseMs <= 0) nextBuilding(s);
       updateLanes(s, ms, input);
       updateJump(s, dt, input);
@@ -792,6 +853,14 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
       s.freezeMs = 0;
       updateJump(s, dt, input);
       updateSpecial(s, ms);
+      return;
+    case 'STAGE_CLEAR':
+      s.phaseMs -= ms;
+      updateJump(s, dt, input);
+      if (s.phaseMs <= 0 && s.story) {
+        s.phase = 'GAME_OVER';
+        s.events.push({ t: 'stageClear', level: s.story.level, score: s.score, maxCombo: s.maxCombo, livesLeft: s.lives, attemptId: s.story.attemptId });
+      }
       return;
     case 'BURIED':
       // the hero is under the building: only an attack press (to break out) does anything

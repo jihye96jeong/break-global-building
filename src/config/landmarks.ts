@@ -18,6 +18,8 @@ export interface Landmark {
   debrisPalette: string[];
   /** what the building is made of: drives chip shapes and impact sounds (v2 §7.2) */
   material: Material;
+  /** v5: a simple fictional starter building for the story mode's first levels (never in the endless rotation) */
+  basic?: boolean;
   /** procedural fallback silhouette when the art cannot be loaded */
   fallback: { shape: 'tower' | 'stepped' | 'wide' | 'twin' | 'lattice' | 'shells' | 'arches' | 'domes'; color: string; accent: string };
 }
@@ -79,7 +81,31 @@ export const LANDMARKS: Landmark[] = [
     asset: art('leaning_tower_pisa'), background: sky('day'), sky: 'day', displayHeight: 340,
     segments: [{ key: 'base', heightRatio: 0.2 }, { key: 'galleries', heightRatio: 0.65 }, { key: 'belfry', heightRatio: 0.15 }],
     debrisPalette: ['#f3efe6', '#d9d2c3', '#b8ad97', '#7d7462'], material: 'stone', fallback: { shape: 'tower', color: '#ece6d8', accent: '#b8ad97' } },
+  // v5 story-mode starter buildings (fictional, generated at development time)
+  { id: 'basic_shop', basic: true, names: { ko: '골목 상가', en: 'Corner Shop', ja: '角のお店', zh: '街角小店' },
+    asset: art('basic_shop'), background: sky('day'), sky: 'day', displayHeight: 150,
+    segments: [{ key: 'shopfront', heightRatio: 0.45 }, { key: 'upper', heightRatio: 0.4 }, { key: 'roof', heightRatio: 0.15 }],
+    debrisPalette: ['#f6d7b0', '#e98f6f', '#9fd3e6', '#6b5a4c'], material: 'mixed', fallback: { shape: 'wide', color: '#f6d7b0', accent: '#e98f6f' } },
+  { id: 'basic_house', basic: true, names: { ko: '3층 주택', en: 'Town House', ja: '三階建ての家', zh: '三层小楼' },
+    asset: art('basic_house'), background: sky('day'), sky: 'day', displayHeight: 200,
+    segments: [{ key: 'ground', heightRatio: 0.3 }, { key: 'floors', heightRatio: 0.45 }, { key: 'roof', heightRatio: 0.25 }],
+    debrisPalette: ['#f3e3c9', '#c9774f', '#8a5a3c', '#5b4636'], material: 'wood', fallback: { shape: 'stepped', color: '#f3e3c9', accent: '#c9774f' } },
+  { id: 'basic_office', basic: true, names: { ko: '낮은 오피스', en: 'Office Block', ja: 'オフィスビル', zh: '办公楼' },
+    asset: art('basic_office'), background: sky('day'), sky: 'day', displayHeight: 230,
+    segments: [{ key: 'lobby', heightRatio: 0.2 }, { key: 'offices', heightRatio: 0.7 }, { key: 'roof', heightRatio: 0.1 }],
+    debrisPalette: ['#cfd8e3', '#8fb7d9', '#5b7a99', '#3b4a5c'], material: 'glass', fallback: { shape: 'tower', color: '#cfd8e3', accent: '#8fb7d9' } },
+  { id: 'basic_apartment', basic: true, names: { ko: '저층 아파트', en: 'Apartment Block', ja: 'マンション', zh: '公寓楼' },
+    asset: art('basic_apartment'), background: sky('day'), sky: 'day', displayHeight: 280,
+    segments: [{ key: 'entrance', heightRatio: 0.15 }, { key: 'balconies', heightRatio: 0.75 }, { key: 'roof', heightRatio: 0.1 }],
+    debrisPalette: ['#efe6d8', '#c8b9a3', '#8d9db0', '#5d5a57'], material: 'stone', fallback: { shape: 'tower', color: '#efe6d8', accent: '#8d9db0' } },
+  { id: 'basic_clocktower', basic: true, names: { ko: '시계탑', en: 'Clock Tower', ja: '時計塔', zh: '钟楼' },
+    asset: art('basic_clocktower'), background: sky('day'), sky: 'day', displayHeight: 300,
+    segments: [{ key: 'base', heightRatio: 0.35 }, { key: 'shaft', heightRatio: 0.35 }, { key: 'clock', heightRatio: 0.15 }, { key: 'roof', heightRatio: 0.15 }],
+    debrisPalette: ['#c8664a', '#9b4a36', '#e9d8b8', '#4f8a7a'], material: 'stone', fallback: { shape: 'tower', color: '#c8664a', accent: '#4f8a7a' } },
 ];
+
+/** Endless mode rotates through the real landmarks only. */
+export const ENDLESS_LANDMARKS = () => LANDMARKS.filter((l) => !l.basic);
 
 export const landmarkById = (id: string) => LANDMARKS.find((l) => l.id === id)!;
 export const REQUIRED_LANDMARKS = ['gyeongbokgung', 'lotte_world_tower', 'burj_khalifa'];

@@ -45,7 +45,7 @@ export function buildingRng(runSeed: number, buildingIndex: number): Rng {
 }
 
 export function pickLandmark(rng: Rng, recent: string[]): Landmark {
-  const pool = LANDMARKS.filter((l) => !recent.slice(-2).includes(l.id));
+  const pool = LANDMARKS.filter((l) => !l.basic && !recent.slice(-2).includes(l.id));
   return pool[Math.floor(rng.next() * pool.length)];
 }
 
