@@ -299,6 +299,15 @@ function endGuard(s: RunState) {
   s.guardContact = null;
 }
 
+/** Send an airborne hero straight back to the ground (no clinging until landed). */
+function dropToGround(s: RunState, speed = JUMP_FEEL.landNowVelocity) {
+  const p = s.player;
+  p.clinging = false;
+  if (p.y <= 0) return;
+  p.dropping = true;
+  p.vy = Math.min(p.vy, -speed);
+}
+
 function nextBuilding(s: RunState) {
   const prevTier = s.building?.tier ?? 1;
   s.buildingIndex += 1;
@@ -310,6 +319,7 @@ function nextBuilding(s: RunState) {
   s.chainLane = -1; s.chainCount = 0;
   endGuard(s); // a fresh building never inherits an old guard episode
   s.specialSeq = null;
+  dropToGround(s); // every building starts with the hero on the ground
   s.phase = 'WAVE_TRANSITION';
   s.phaseMs = s.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs;
   if (st && st.waveIndex === st.waveCount - 1 && stageFor(st.level).finalIntro) s.phaseMs = BALANCE.finalIntroMs; // FINAL BUILDING card (physics paused)
@@ -448,10 +458,13 @@ function applyHit(s: RunState, proof: ContactProof, variant: number) {
   if (r.buildingCleared) {
     freeze(s, HITSTOP_MS.building);
     buildingCleared(s, b, aerial);
+    dropToGround(s);
     afterBuilding(s);
   } else {
     b.pressMs = 0; // the next floor drops in at full speed, not at the creep
     b.settleMs = CONTACT.postBreakSettleMs;
+    b.velocityY = -CONTACT.breakPopVelocity; // what is left jumps up a little, then comes back down
+    dropToGround(s); // and the hero lands right away
     freeze(s, HITSTOP_MS.floor);
   }
 }
@@ -574,12 +587,12 @@ function updateJump(s: RunState, dt: number, input: Intents) {
   else p.jumpBufferMs = Math.max(0, p.jumpBufferMs - ms);
 
 
-  // stuck to the underside: ride it for a moment, and as long as Z or ↓ is held; jump again (or let go) to drop
+  // stuck to the underside: only for a moment (so a ↓ can still catch it), longer only while ↓ is held
   if (p.clinging) {
     const b = s.building;
     p.clingMs -= ms;
     const ceil = b && !b.defeated && !b.collisionDisabled ? Math.max(0, DANGER_Y - poseReach(s) - b.bottomY) : 0;
-    const keep = (p.clingMs > 0 || input.attack || input.guard) && !input.jumpPressed;
+    const keep = (p.clingMs > 0 || input.guard) && !input.jumpPressed && !p.dropping;
     if (keep && ceil > 0 && p.y > 0) { p.y = ceil; p.vy = 0; p.peakY = Math.max(p.peakY, p.y); return; }
     p.clinging = false;
   }
@@ -851,7 +864,7 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
       updateJump(s, dt, input);
       updateGuardInput(s, input);
       if (input.attackPressed) p.bufferedAttackMs = CONTACT.attackBufferMs;
-      if (s.phaseMs <= 0) s.phase = 'PLAYING';
+      if (s.phaseMs <= 0 && s.player.y <= 0) s.phase = 'PLAYING'; // the new building waits until the hero has landed
       return;
     case 'SPECIAL':
       // collision is off; the hero is invulnerable; falling, attacks and guards are all skipped

@@ -12,6 +12,7 @@ export const JUMP_FEEL = {
   takeoffStretchMs: 100,
   clingMs: 300, // an airborne hero who reaches the underside sticks to it this long (and while Z or ↓ is held)
   airGuardDropVelocity: 260, // wu/s down: after an air guard the hero drops straight back to the ground
+  landNowVelocity: 900, // wu/s down: after a floor breaks (or a new building comes) the hero drops straight to the ground
   homingOvershoot: 10, // wu: a leap toward a high building aims a little past its underside so it always touches
 };
 
@@ -34,6 +35,7 @@ export const CONTACT = {
   pressureHoldMs: 150, // the creep lasts this long after a hit; with no new hit the building speeds back up
   postBreakSettleSpeed: 400, // wu/s: the next floor drops fast onto the blade after a floor break…
   postBreakSettleMs: 140,
+  breakPopVelocity: 320, // wu/s up: after a floor breaks the rest of the building pops up ~8 wu before settling down again
   postBreakSettleAccel: 6000,
   settleEaseGap: [6, 26] as [number, number], // …easing back to normal speed over the last 26 → 6 wu
 };

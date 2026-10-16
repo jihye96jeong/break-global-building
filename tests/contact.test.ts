@@ -322,7 +322,7 @@ describe('AIR — high jump up to the building, stuck to it: guard and attack wo
     }
   });
 
-  it('AIR-02 ↓ held from take-off guards on arrival; Z held keeps the hero up there hitting', () => {
+  it('AIR-02 ↓ held from take-off guards on arrival; Z hits up there, then the hero comes back down', () => {
     const s = playing(building(tall(6), 120));
     s.building!.baseSpeed = 190; s.building!.velocityY = 190;
     let ev = step(s, { jump: true, jumpPressed: true, guard: true, guardPressed: true });
@@ -330,14 +330,58 @@ describe('AIR — high jump up to the building, stuck to it: guard and attack wo
     expect(count(ev, 'guardContact')).toBeGreaterThanOrEqual(1);
     const a = leap(120, 190);
     let hits = 0;
-    for (let i = 0; i < 40; i++) { hits += count(step(a, { attack: true, attackPressed: i === 0 }), 'hit'); }
-    expect(hits).toBeGreaterThanOrEqual(3);
-    expect(a.player.y).toBeGreaterThan(50);
+    for (let i = 0; i < 60; i++) { hits += count(step(a, { attack: true, attackPressed: i === 0 }), 'hit'); }
+    expect(hits).toBeGreaterThanOrEqual(1);
+    expect(a.player.y).toBe(0); // no staying up there just because Z is held
   });
 
   it('AIR-03 with nothing held the hero lets go after the short cling and falls back down', () => {
     const s = leap(150);
     for (let i = 0; i < 90; i++) step(s);
+    expect(s.player.y).toBe(0);
+  });
+});
+
+describe('FLOW — after a break the building pops up a little and the hero lands; every building starts on the ground', () => {
+  const leapAndHit = (hp: [HP, HP, HP], floors = 4) => {
+    const s = playing(building(tall(floors, hp, 30), 150));
+    s.building!.baseSpeed = 0; s.building!.velocityY = 0;
+    step(s, { jump: true, jumpPressed: true });
+    for (let i = 0; i < 40 && s.player.y > 0 && attackSurfaceY(s) - s.building!.bottomY > 0.5; i++) step(s, { jump: true });
+    return s;
+  };
+
+  it('FLOW-01 a floor broken in the air: the rest pops up a little, the hero drops straight to the ground', () => {
+    const s = leapAndHit([1, 1, 1]);
+    expect(s.player.y).toBeGreaterThan(100);
+    const b = s.building!;
+    const before = b.bottomY;
+    const ev = step(s, { attack: true, attackPressed: true });
+    expect(count(ev, 'floor')).toBe(1);
+    const afterBreak = b.bottomY; // the broken floor's height is gone
+    let top = afterBreak, t = 0;
+    while (s.player.y > 0 && t < 1) { step(s, { attack: true }); top = Math.min(top, b.bottomY); t += DT; }
+    expect(afterBreak).toBeLessThan(before);
+    expect(afterBreak - top).toBeGreaterThan(5); // the little extra pop
+    expect(afterBreak - top).toBeLessThan(14);
+    expect(t).toBeLessThan(0.45); // landed quickly, even with Z held
+    expect(s.player.y).toBe(0);
+  });
+
+  it('FLOW-02 holding Z under a building never keeps the hero hanging up there', () => {
+    const s = leapAndHit([3, 3, 3], 6);
+    let t = 0;
+    while (s.player.y > 0 && t < 2) { step(s, { attack: true, attackPressed: t === 0 }); t += DT; }
+    expect(t).toBeLessThan(0.8);
+  });
+
+  it('FLOW-03 the next building (and the next stage) starts with the hero on the ground', () => {
+    const s = leapAndHit([1, 1, 1], 1); // one floor: breaking it clears the building
+    expect(s.player.y).toBeGreaterThan(100);
+    step(s, { attack: true, attackPressed: true });
+    expect(s.phase).toBe('WAVE_TRANSITION');
+    while (s.phase === 'WAVE_TRANSITION') step(s, { attack: true });
+    expect(s.phase).toBe('PLAYING');
     expect(s.player.y).toBe(0);
   });
 });
