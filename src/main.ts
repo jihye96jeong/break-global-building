@@ -537,7 +537,7 @@ function bind() {
     sel.addEventListener('change', () => setLang(sel.value as Lang));
   });
   applyDom();
-  onLangChange(() => { syncSound(); last.lang = ''; renderKeyGuide(); });
+  onLangChange(() => { syncSound(); last.lang = ''; renderKeyGuide(); if (!$('ov-map').classList.contains('hidden')) worldMap.render(story.progress); });
   renderKeyGuide();
   const click = (id: string, fn: () => void) => $(id).addEventListener('click', () => { audio.unlock(); fn(); });
   click('btn-start', toMap); // intro → world map

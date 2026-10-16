@@ -1,12 +1,16 @@
-// v5 §2 world map: one long road from a sunny morning (level 1, bottom) to the deepest night (level 10, top).
+// v5 §2 world map: one long horizontal road from a sunny morning (level 1, left) to the deepest night (level 10, right).
 // Nodes are real buttons (click / tap / arrow keys + Enter); the scenery is CSS/SVG decoration only.
+import { landmarkById } from '../config/landmarks';
 import { lang, t, tf } from '../i18n';
 import { canEnterStoryLevel, type StoryProgress } from './progress';
 import { STORY_LEVELS, STORY_STAGES, stageFor, TIME_NAMES } from './stages';
 
-const MAP_H = 1560;
-/** node centres: x in % of the map width, y in px from the top (level 1 at the bottom) */
-const NODES: [number, number][] = [[24, 1440], [70, 1310], [34, 1175], [74, 1040], [30, 905], [70, 770], [30, 635], [72, 500], [34, 365], [62, 215]];
+const STEP = 230; // px between levels along the road
+const MAP_W = STEP * (STORY_LEVELS + 0.6);
+/** node centres: x in px from the left (level 1 first), y in % of the map height */
+const NODES: [number, number][] = STORY_STAGES.map((_, i) => [STEP * (i + 0.8), [64, 44, 66, 42, 64, 44, 66, 42, 64, 48][i]]);
+/** the landmark that stands for each level on the road: its final building, else the first in its pool */
+const iconOf = (level: number) => { const st = stageFor(level); return landmarkById(st.finalWaveLandmark ?? st.landmarkPool[0]); };
 
 export interface MapCallbacks {
   onPlay(level: number): void;
@@ -31,6 +35,8 @@ export class WorldMap {
   private starsEl!: HTMLElement;
   private paths: SVGPathElement[] = [];
   private nodes: HTMLButtonElement[] = [];
+  private icons: HTMLImageElement[] = [];
+  private goBtn!: HTMLButtonElement;
   private selected = 1;
   private progress!: StoryProgress;
 
@@ -49,85 +55,103 @@ export class WorldMap {
     head.append(this.starsEl);
     this.scroller = el('div', 'map-scroll');
     this.world = el('div', 'map-world');
-    this.world.style.height = `${MAP_H}px`;
-    // day → night: the sky behind the road follows the ten levels' palettes, bottom to top
-    const stops = STORY_STAGES.map((s, i) => `${s.palette.skyBottom} ${(i / STORY_LEVELS) * 100}%, ${s.palette.skyTop} ${((i + 0.85) / STORY_LEVELS) * 100}%`);
-    this.world.style.background = `linear-gradient(to top, ${stops.join(', ')})`;
-    this.world.append(this.scenery());
+    this.world.style.width = `${MAP_W}px`;
+    // day → night: the sky behind the road follows the ten levels' palettes, left to right
+    const top = STORY_STAGES.map((st, i) => `${st.palette.skyTop} ${((i + 0.5) / STORY_LEVELS) * 100}%`);
+    const bottom = STORY_STAGES.map((st, i) => `${st.palette.skyBottom} ${((i + 0.5) / STORY_LEVELS) * 100}%`);
+    this.world.style.background = `linear-gradient(to right, ${top.join(', ')})`;
+    const low = el('div', 'map-sky-low');
+    low.style.background = `linear-gradient(to right, ${bottom.join(', ')})`;
+    this.world.append(low, this.scenery());
     const svg = document.createElementNS(svgNS, 'svg');
     svg.setAttribute('class', 'map-road');
-    svg.setAttribute('viewBox', `0 0 100 ${MAP_H}`);
+    svg.setAttribute('viewBox', `0 0 ${MAP_W} 100`);
     svg.setAttribute('preserveAspectRatio', 'none');
     for (let i = 0; i < STORY_LEVELS - 1; i++) {
       const [x0, y0] = NODES[i], [x1, y1] = NODES[i + 1];
       const p = document.createElementNS(svgNS, 'path');
-      const my = (y0 + y1) / 2;
-      p.setAttribute('d', `M${x0} ${y0} C${x0} ${my}, ${x1} ${my}, ${x1} ${y1}`);
+      const mx = (x0 + x1) / 2;
+      p.setAttribute('d', `M${x0} ${y0} C${mx} ${y0}, ${mx} ${y1}, ${x1} ${y1}`);
       p.setAttribute('vector-effect', 'non-scaling-stroke');
       svg.append(p);
       this.paths.push(p);
     }
     this.world.append(svg);
     NODES.forEach(([x, y], i) => {
+      const lm = iconOf(i + 1);
+      const icon = el('img', 'map-icon') as HTMLImageElement;
+      icon.src = lm.asset; icon.alt = ''; icon.draggable = false;
+      icon.style.left = `${x}px`;
+      icon.style.top = `${y}%`;
+      this.world.append(icon);
+      this.icons.push(icon);
       const b = el('button', 'map-node') as HTMLButtonElement;
-      b.style.left = `${x}%`;
-      b.style.top = `${y}px`;
+      b.style.left = `${x}px`;
+      b.style.top = `${y}%`;
       b.dataset.level = String(i + 1);
       b.addEventListener('click', () => this.select(i + 1, true));
       this.world.append(b);
       this.nodes.push(b);
     });
     this.scroller.append(this.world);
+    // a mouse wheel moves the road sideways
+    this.scroller.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { this.scroller.scrollLeft += e.deltaY; e.preventDefault(); }
+    }, { passive: false });
+    // the dock: the selected level's card, then the big buttons (play, endless) and settings
+    const dock = el('footer', 'map-dock');
     this.panel = el('div', 'map-panel');
-    const foot = el('footer', 'map-foot');
-    const endless = el('button', 'small-btn', '') as HTMLButtonElement;
-    endless.dataset.i18n = 'endless';
+    const actions = el('div', 'map-actions');
+    this.goBtn = el('button', 'big-btn map-go') as HTMLButtonElement;
+    this.goBtn.addEventListener('click', () => this.play());
+    const endless = el('button', 'big-btn map-endless') as HTMLButtonElement;
+    endless.innerHTML = '<span class="inf">∞</span> <span data-i18n="endless"></span>';
     endless.addEventListener('click', () => this.cb.onEndless());
-    const settings = el('button', 'small-btn') as HTMLButtonElement;
+    const settings = el('button', 'small-btn map-settings') as HTMLButtonElement;
     settings.dataset.i18n = 'settings';
     settings.addEventListener('click', () => this.cb.onSettings());
+    actions.append(this.goBtn, endless, settings);
     const note = el('span', 'map-note');
     note.dataset.i18n = 'autosave';
-    foot.append(endless, settings, note);
-    r.append(head, this.scroller, this.panel, foot);
+    dock.append(this.panel, actions, note);
+    r.append(head, this.scroller, dock);
     r.addEventListener('keydown', (e) => this.onKey(e));
   }
 
-  /** Sun and clouds low on the road, a sunset band, then stars, a moon and lit city windows toward the top. */
+  /** Sun and clouds on the left, a sunset in the middle, then stars, a moon and lit city windows toward the right. */
   private scenery() {
-    const s = document.createElementNS(svgNS, 'svg');
-    s.setAttribute('class', 'map-scenery');
-    s.setAttribute('viewBox', `0 0 400 ${MAP_H}`);
-    s.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-    let h = '';
-    h += `<circle cx="330" cy="${MAP_H - 210}" r="46" fill="#fff6c9" opacity=".95"/><circle cx="330" cy="${MAP_H - 210}" r="70" fill="#fff6c9" opacity=".25"/>`;
-    for (const [cx, cy, w] of [[80, MAP_H - 120, 90], [250, MAP_H - 330, 110], [120, MAP_H - 520, 80], [300, MAP_H - 640, 70]]) {
-      h += `<g fill="#ffffff" opacity=".8"><ellipse cx="${cx}" cy="${cy}" rx="${w / 2}" ry="${w / 6}"/><ellipse cx="${cx - w / 5}" cy="${cy - w / 8}" rx="${w / 4}" ry="${w / 5}"/><ellipse cx="${cx + w / 6}" cy="${cy - w / 7}" rx="${w / 3.5}" ry="${w / 4.5}"/></g>`;
-    }
-    h += `<circle cx="70" cy="${MAP_H - 900}" r="40" fill="#ffb27a" opacity=".85"/>`; // the setting sun near level 5
+    const wrap = el('div', 'map-scenery');
     let seed = 7;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    for (let i = 0; i < 140; i++) {
-      const y = rnd() * (MAP_H * 0.5); // stars live in the upper (night) half
-      const op = (0.25 + 0.75 * (1 - y / (MAP_H * 0.5))).toFixed(2);
-      h += `<circle cx="${(rnd() * 400).toFixed(1)}" cy="${y.toFixed(1)}" r="${(0.6 + rnd() * 1.4).toFixed(1)}" fill="#fff" opacity="${op}"/>`;
+    const H = 100; // the svg is stretched to the map height: only rectangles and tiny stars, so nothing looks squashed
+    let h = '';
+    for (let i = 0; i < 170; i++) {
+      const x = MAP_W * (0.42 + rnd() * 0.58); // stars live in the right (night) part
+      const op = (0.2 + 0.8 * ((x / MAP_W - 0.42) / 0.58)).toFixed(2);
+      h += `<rect x="${x.toFixed(0)}" y="${(rnd() * H * 0.62).toFixed(1)}" width="${(1.5 + rnd() * 2).toFixed(1)}" height="${(0.3 + rnd() * 0.35).toFixed(2)}" fill="#fff" opacity="${op}"/>`;
     }
-    h += `<circle cx="300" cy="120" r="34" fill="#f4f1dc"/><circle cx="314" cy="110" r="30" fill="${STORY_STAGES[9].palette.skyTop}" opacity=".9"/>`;
-    // city silhouettes along the road; windows light up toward the night
-    const city = (y: number, color: string, lit: number) => {
-      let g = `<g>`;
-      let x = -10;
-      while (x < 410) {
-        const w = 18 + rnd() * 26, hh = 26 + rnd() * 70;
-        g += `<rect x="${x.toFixed(1)}" y="${(y - hh).toFixed(1)}" width="${w.toFixed(1)}" height="${(hh + 40).toFixed(1)}" fill="${color}"/>`;
-        if (lit > 0) for (let wy = y - hh + 6; wy < y - 4; wy += 9) for (let wx = x + 4; wx < x + w - 4; wx += 7) if (rnd() < lit) g += `<rect x="${wx.toFixed(1)}" y="${wy.toFixed(1)}" width="3" height="4" fill="#ffd977"/>`;
-        x += w + 2;
-      }
-      return g + '</g>';
-    };
-    h += city(MAP_H - 30, '#9fb6c9', 0) + city(MAP_H - 760, '#7c5a78', 0.12) + city(MAP_H - 1080, '#2c3566', 0.35) + city(MAP_H - 1330, '#141c3d', 0.6);
+    // city silhouettes along the bottom; windows light up toward the night
+    const colors = ['#a9c2d6', '#9fb6c9', '#93a8bd', '#a08a86', '#8a5f7a', '#4a3f74', '#2c3566', '#1c2650', '#141c3d', '#0e1532'];
+    const lit = [0, 0, 0, 0, 0.08, 0.25, 0.4, 0.55, 0.65, 0.7];
+    let x = -10;
+    while (x < MAP_W + 10) {
+      const lv = Math.max(0, Math.min(STORY_LEVELS - 1, Math.floor(x / STEP - 0.3)));
+      const w = 22 + rnd() * 34, hh = 7 + rnd() * 13;
+      h += `<rect x="${x.toFixed(0)}" y="${(H - hh).toFixed(2)}" width="${w.toFixed(0)}" height="${hh.toFixed(2)}" fill="${colors[lv]}"/>`;
+      if (lit[lv] > 0) for (let wy = H - hh + 1.4; wy < H - 1; wy += 2.4) for (let wx = x + 4; wx < x + w - 5; wx += 8) if (rnd() < lit[lv]) h += `<rect x="${wx.toFixed(0)}" y="${wy.toFixed(2)}" width="4" height="1.1" fill="#ffd977"/>`;
+      x += w + 2;
+    }
+    const s = document.createElementNS(svgNS, 'svg');
+    s.setAttribute('class', 'map-scenery-svg');
+    s.setAttribute('viewBox', `0 0 ${MAP_W} ${H}`);
+    s.setAttribute('preserveAspectRatio', 'none');
     s.innerHTML = h;
-    return s;
+    // round things stay round: sun, setting sun, moon and clouds are their own elements
+    const deco = (cls: string, left: number, top: number) => { const d = el('div', cls); d.style.left = `${left}px`; d.style.top = `${top}%`; return d; };
+    wrap.append(s,
+      deco('map-sun', STEP * 0.35, 10), deco('map-sun set', STEP * 4.55, 30), deco('map-moon', MAP_W - STEP * 0.9, 8),
+      deco('map-cloud', STEP * 1.2, 14), deco('map-cloud', STEP * 2.3, 6), deco('map-cloud small', STEP * 3.4, 18), deco('map-cloud small', STEP * 0.1, 30));
+    return wrap;
   }
 
   /** Re-draw node states from the saved progress; optionally light up a newly unlocked road segment. */
@@ -141,6 +165,7 @@ export class WorldMap {
       const cleared = !!rec?.cleared;
       const next = open && !cleared;
       b.className = `map-node${cleared ? ' cleared' : ''}${next ? ' next' : ''}${open ? '' : ' locked'}`;
+      this.icons[i].classList.toggle('locked', !open);
       const stars = cleared ? '★'.repeat(rec.bestStars) + '☆'.repeat(3 - rec.bestStars) : '';
       b.innerHTML = `<span class="n">${open ? level : '🔒'}</span>${stars ? `<span class="st">${stars}</span>` : ''}`;
       const st = stageFor(level);
@@ -158,8 +183,8 @@ export class WorldMap {
   }
 
   private scrollTo(level: number, instant: boolean) {
-    const y = NODES[level - 1][1] - this.scroller.clientHeight * 0.55;
-    this.scroller.scrollTo({ top: Math.max(0, y), behavior: instant ? 'auto' : 'smooth' });
+    const x = NODES[level - 1][0] - this.scroller.clientWidth * 0.5;
+    this.scroller.scrollTo({ left: Math.max(0, x), behavior: instant ? 'auto' : 'smooth' });
   }
 
   select(level: number, fromClick: boolean) {
@@ -171,15 +196,16 @@ export class WorldMap {
     const best = rec?.cleared ? `<span class="best">${t('bestLbl')} ★${rec.bestStars} · ${rec.bestScore.toLocaleString()} · ×${rec.bestCombo}</span>` : '';
     this.panel.innerHTML = `
       <div class="lv">${t('level').toUpperCase()} ${level} <small>/ ${STORY_LEVELS}</small></div>
-      <div class="ttl">${st.title[lang]}</div>
+      <div class="ttl">${st.title[lang]} <span class="lm">· ${iconOf(level).names[lang]}</span></div>
       <div class="meta"><span>${TIME_NAMES[st.timeOfDay][lang]}</span><span>${tf('buildingsN', { n: st.waveCount })}</span><span>${st.baseFallSpeed}–${Math.round(st.baseFallSpeed * 1.04)} wu/s</span></div>
       ${level === 1 && !rec?.cleared ? `<div class="tip">${t('firstHint')}</div>` : ''}
       ${best}
-      ${open ? `<button class="big-btn map-go">${t('challenge')}</button>` : `<div class="lockmsg">🔒 ${t('lockedMsg')}</div>`}`;
+      ${open ? '' : `<div class="lockmsg">🔒 ${t('lockedMsg')}</div>`}`;
     this.panel.style.setProperty('--sky-top', st.palette.skyTop);
     this.panel.style.setProperty('--sky-bottom', st.palette.skyBottom);
-    const go = this.panel.querySelector<HTMLButtonElement>('.map-go');
-    go?.addEventListener('click', () => this.play());
+    const go = this.goBtn;
+    go.innerHTML = `▶ ${t('challenge')} <small>${t('level').toUpperCase()} ${level}</small>`;
+    go.disabled = !open;
     if (fromClick) (open ? go : this.nodes[level - 1])?.focus();
   }
 
