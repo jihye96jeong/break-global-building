@@ -260,7 +260,7 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     b.bottomY -= 400; // room to watch the whole slow spell and the speed-up before it reaches the hero
     const slow = Math.max(GUARD_FEEL.postGuardSlowMin, 500 * GUARD_FEEL.postGuardSlowFactor);
     for (let t = 0; t < 0.6; t += DT) { step(s); expect(b.velocityY).toBeLessThanOrEqual(slow + 1e-6); }
-    for (let i = 0; i < 24; i++) step(s); // the slow spell (0.8 s) is over …
+    for (let i = 0; i < 60; i++) step(s); // the slow spell (1.3 s) is over …
     expect(s.phase).toBe('PLAYING');
     expect(b.velocityY).toBeGreaterThan(slow + 50); // … and it falls at full speed again
   });

@@ -17,6 +17,8 @@ export class Input {
   private fingers = new Map<number, Action>();
   private pressed = new Set<Action>();
   private laneTap: Lane | undefined;
+  private releaseTimer = new Map<Action, ReturnType<typeof setTimeout>>();
+  static readonly RELEASE_GRACE_MS = 45;
   onSystem: (a: 'pause' | 'mute') => void = () => {};
   onGesture: () => void = () => {};
 
@@ -28,10 +30,19 @@ export class Input {
       this.onGesture();
       if (e.repeat) return;
       if (a === 'pause' || a === 'mute') { this.onSystem(a); return; }
+      // some systems turn a held key's auto-repeat into keyup+keydown pairs: a key that comes back within a few ms
+      // was never really let go, so it is still held and is not a new press (otherwise ↓ held = endless guards)
+      const t = this.releaseTimer.get(a);
+      if (t !== undefined) { clearTimeout(t); this.releaseTimer.delete(a); this.keys.add(a); return; }
       this.keys.add(a);
       this.pressed.add(a);
     });
-    addEventListener('keyup', (e) => { const a = KEYS[e.code]; if (a) this.keys.delete(a); });
+    addEventListener('keyup', (e) => {
+      const a = KEYS[e.code];
+      if (!a || !this.keys.has(a)) return;
+      if (this.releaseTimer.has(a)) clearTimeout(this.releaseTimer.get(a));
+      this.releaseTimer.set(a, setTimeout(() => { this.releaseTimer.delete(a); this.keys.delete(a); }, Input.RELEASE_GRACE_MS));
+    });
     addEventListener('blur', () => this.clear());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.clear(); });
   }
@@ -80,6 +91,7 @@ export class Input {
   }
 
   clear() {
+    this.releaseTimer.forEach((t) => clearTimeout(t)); this.releaseTimer.clear();
     this.keys.clear(); this.fingers.clear(); this.pressed.clear(); this.laneTap = undefined;
     document.querySelectorAll('.pressed').forEach((n) => n.classList.remove('pressed'));
   }
