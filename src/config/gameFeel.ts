@@ -10,6 +10,7 @@ export const JUMP_FEEL = {
   jumpBuffer: 0.11, // s: a press just before landing still jumps
   landingSquashMs: 100,
   takeoffStretchMs: 100,
+  clingMs: 300, // an airborne hero who reaches the underside sticks to it this long (and while Z or ↓ is held)
   homingOvershoot: 10, // wu: a leap toward a high building aims a little past its underside so it always touches
 };
 
@@ -34,7 +35,7 @@ export const CONTACT = {
 };
 
 export const GUARD_FEEL = {
-  guardReachAboveHead: 8, // guard pose: the raised flat blade is 8 wu above the head
+  guardReachAboveHead: 12, // guard pose: the raised flat blade — the same height as the attack blade, so touching = touching
   braceCompression: { ground: 4, air: 2.5 },
   braceCompressionMs: 35,
   holdMs: { ground: 120, air: 100 },

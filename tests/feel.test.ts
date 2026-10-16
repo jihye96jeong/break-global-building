@@ -148,11 +148,12 @@ describe('guard contact (v2 §4)', () => {
     const b = s.building!; b.velocityY = 0; b.baseSpeed = 0;
     const log: { bottom: number; phase: string }[] = [];
     tick(s, DT, { ...NO_INPUT, jump: true, jumpPressed: true });
-    let pressed = false;
+    let pressed = false, caught = false;
     for (let i = 0; i < 70; i++) {
       const near = !pressed && guardPlaneY(s) - b.bottomY < 30; // press ↓ just before the blade meets the underside
       if (near) pressed = true;
-      tick(s, DT, { ...NO_INPUT, jump: true, guard: pressed && i < 40, guardPressed: near });
+      tick(s, DT, { ...NO_INPUT, jump: true, guard: pressed && !caught, guardPressed: near }); // ↓ held until the one contact
+      if (s.guardPhase === 'HOLD') caught = true;
       log.push({ bottom: b.bottomY, phase: s.guardPhase });
     }
     expect(log.some((l) => l.phase === 'HOLD')).toBe(true);

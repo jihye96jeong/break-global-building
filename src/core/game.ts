@@ -106,6 +106,8 @@ export interface PlayerState {
   swing: Swing | null;
   moveRepeatMs: number;
   guarding: boolean; // guard pose shown (↓ held / pressed, or bracing)
+  clinging: boolean; // airborne and stuck to the building's underside
+  clingMs: number;
 }
 
 export interface GuardContact {
@@ -171,7 +173,7 @@ export interface RunState {
 export function newPlayer(): PlayerState {
   return { lane: 1, laneFrom: 1, laneAnimMs: 0, y: 0, vy: 0, peakY: 0, jumpElapsed: 0, jumpCut: false, jumpBufferMs: 0, landMs: 0,
     facing: 1, attackCooldownMs: 0, attackAnimMs: 0, bufferedAttackMs: 0, swingCount: 0, swing: null, moveRepeatMs: 0,
-    guarding: false };
+    guarding: false, clinging: false, clingMs: 0 };
 }
 
 export function newRun(seed: number): RunState {
@@ -493,7 +495,11 @@ function clampUnderBuilding(s: RunState) {
   const p = s.player, b = s.building;
   if (!b || b.defeated || bracing(s) || p.y <= 0) return;
   const maxY = Math.max(0, DANGER_Y - poseReach(s) - b.bottomY);
-  if (p.y > maxY) { p.y = maxY; if (p.vy > 0) p.vy = 0; }
+  if (p.y >= maxY - 0.001) {
+    p.y = maxY; if (p.vy > 0) p.vy = 0;
+    // reaching the underside in the air: stick to it (so attack and guard keep touching it)
+    if (maxY > 0 && !p.clinging) { p.clinging = true; p.clingMs = JUMP_FEEL.clingMs; }
+  }
 }
 
 /** Feet height at which the blade would touch the current building's underside (0 if there is none on screen). */
@@ -514,6 +520,16 @@ function updateJump(s: RunState, dt: number, input: Intents) {
   // bracing under the building during an air guard hold: the hero stays glued to the contact point
   if (s.guardPhase === 'HOLD' && s.guardContact?.kind === 'air') return;
 
+  // stuck to the underside: ride it for a moment, and as long as Z or ↓ is held; jump again (or let go) to drop
+  if (p.clinging) {
+    const b = s.building;
+    p.clingMs -= ms;
+    const ceil = b && !b.defeated && !b.collisionDisabled ? Math.max(0, DANGER_Y - poseReach(s) - b.bottomY) : 0;
+    const keep = (p.clingMs > 0 || input.attack || input.guard) && !input.jumpPressed;
+    if (keep && ceil > 0 && p.y > 0) { p.y = ceil; p.vy = 0; p.peakY = Math.max(p.peakY, p.y); return; }
+    p.clinging = false;
+  }
+
   if (p.y <= 0 && p.vy <= 0 && p.jumpBufferMs > 0) {
     // no height limit but the building itself: with a building on screen above, the leap is always strong enough to
     // bring the blade right up to its underside (wherever it is); otherwise the normal ~204 wu jump
@@ -530,7 +546,7 @@ function updateJump(s: RunState, dt: number, input: Intents) {
     p.y += p.vy * dt;
     if (p.y > p.peakY) p.peakY = p.y;
     if (p.y <= 0) {
-      p.y = 0; p.vy = 0; p.landMs = JUMP_FEEL.landingSquashMs;
+      p.y = 0; p.vy = 0; p.landMs = JUMP_FEEL.landingSquashMs; p.clinging = false;
       s.events.push({ t: 'land', fromHeight: p.peakY });
     }
   }
@@ -686,7 +702,7 @@ function resolveCrush(s: RunState) {
   endGuard(s);
   const p = s.player;
   p.swing = null; p.bufferedAttackMs = 0; p.guarding = false; p.attackAnimMs = 0;
-  p.y = 0; p.vy = 0; p.laneFrom = p.lane; p.laneAnimMs = 0;
+  p.y = 0; p.vy = 0; p.laneFrom = p.lane; p.laneAnimMs = 0; p.clinging = false;
   s.contact.lastEvent = 'CRUSH';
   s.events.push({ t: 'crushed', bottomY: b.bottomY, landmarkId: b.landmarkId, air: false });
 }

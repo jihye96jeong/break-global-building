@@ -117,7 +117,9 @@ export class Renderer {
     if (f.countdown) this.bigText(String(f.countdown), WORLD_H * 0.42, 120, '#ffe066');
     if (f.waveCard) this.drawWaveCard(f.waveCard);
     // banners sit just under the HUD so they never cover the weak spots
-    let by = 168;
+    // when a high building's underside (and the hero stuck to it) is up there, banners go below them instead
+    const hb = s.building;
+    let by = hb && !hb.defeated && hb.bottomY > 110 && hb.bottomY < 300 ? Math.max(hb.bottomY + 110, 330) : 168;
     for (const bn of f.banners.list) {
       const age = 1 - bn.life / bn.max;
       const sc = age < 0.15 ? 0.7 + age / 0.15 * 0.4 : age < 0.25 ? 1.1 - (age - 0.15) : 1;

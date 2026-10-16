@@ -296,6 +296,47 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
   });
 });
 
+describe('AIR — high jump up to the building, stuck to it: guard and attack work up there', () => {
+  const leap = (bottom: number, speed = 0) => {
+    const s = playing(building(tall(6), bottom));
+    s.building!.baseSpeed = speed; s.building!.velocityY = speed;
+    step(s, { jump: true, jumpPressed: true });
+    let i = 0;
+    while (attackSurfaceY(s) - s.building!.bottomY > 0.5 && i++ < 90) step(s, { jump: true });
+    return s;
+  };
+
+  it('AIR-01 ↓ pressed any time while stuck under it (0–280 ms after touching) is a guard', () => {
+    for (const bottom of [90, 160, 240]) for (const delay of [0, 50, 120, 200, 280]) {
+      const s = leap(bottom, 190);
+      expect(s.player.y).toBeGreaterThan(50);
+      for (let t = 0; t < delay; t += 1000 / 60) step(s);
+      const ev = step(s, { guard: true, guardPressed: true });
+      const g = ev.find((e) => e.t === 'guardContact');
+      expect(g?.t === 'guardContact' && g.kind).toBe('air');
+    }
+  });
+
+  it('AIR-02 ↓ held from take-off guards on arrival; Z held keeps the hero up there hitting', () => {
+    const s = playing(building(tall(6), 120));
+    s.building!.baseSpeed = 190; s.building!.velocityY = 190;
+    let ev = step(s, { jump: true, jumpPressed: true, guard: true, guardPressed: true });
+    for (let i = 0; i < 40; i++) ev = ev.concat(step(s, { guard: true }));
+    expect(count(ev, 'guardContact')).toBeGreaterThanOrEqual(1);
+    const a = leap(120, 190);
+    let hits = 0;
+    for (let i = 0; i < 40; i++) { hits += count(step(a, { attack: true, attackPressed: i === 0 }), 'hit'); }
+    expect(hits).toBeGreaterThanOrEqual(3);
+    expect(a.player.y).toBeGreaterThan(50);
+  });
+
+  it('AIR-03 with nothing held the hero lets go after the short cling and falls back down', () => {
+    const s = leap(150);
+    for (let i = 0; i < 90; i++) step(s);
+    expect(s.player.y).toBe(0);
+  });
+});
+
 describe('CR — crush: one life, the hero buried under the building, Z breaks out and blasts it back up', () => {
   const crush = (speed = 190) => { const s = playing(building(tall(5), DANGER_Y - 20)); s.building!.baseSpeed = speed; s.building!.velocityY = speed; return s; };
   const untilBuried = (s: RunState) => { const ev: GameEvent[] = []; while (s.phase === 'PLAYING') ev.push(...step(s)); for (let i = 0; i < 12; i++) ev.push(...step(s)); return ev; };
