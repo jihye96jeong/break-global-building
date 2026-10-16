@@ -320,11 +320,7 @@ function detect(): Lang {
     const saved = localStorage.getItem(STORAGE_LANG);
     if (saved && (LANGS as readonly string[]).includes(saved)) return saved as Lang;
   } catch { /* storage blocked */ }
-  for (const l of navigator.languages ?? [navigator.language]) {
-    const base = l.toLowerCase().split('-')[0];
-    if ((LANGS as readonly string[]).includes(base)) return base as Lang;
-  }
-  return 'ko';
+  return 'ko'; // Korean unless the player picked another language with the top-right switch
 }
 
 export let lang: Lang = typeof navigator === 'undefined' ? 'ko' : detect();
@@ -349,4 +345,6 @@ export function applyDom() {
   document.querySelectorAll<HTMLElement>('[data-i18n-html]').forEach((el) => { el.innerHTML = t(el.dataset.i18nHtml as Key); });
   document.querySelectorAll<HTMLElement>('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria as Key)); });
   document.querySelectorAll<HTMLSelectElement>('.lang-select').forEach((s) => { s.value = lang; });
+  document.querySelectorAll<HTMLElement>('.lang-name').forEach((el) => { el.textContent = LANG_LABEL[lang]; });
+  document.querySelectorAll<HTMLElement>('.lang-code').forEach((el) => { el.textContent = lang.toUpperCase(); });
 }

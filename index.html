@@ -82,7 +82,6 @@
           <div class="row">
             <button id="btn-help" class="small-btn" data-i18n="help"></button>
             <button id="btn-sound" class="small-btn sound-toggle"></button>
-            <label class="lang"><span class="sr" data-i18n="language"></span><select class="lang-select small-btn"></select></label>
           </div>
           <p class="keys-line" data-i18n="keyGuide"></p>
         </div>
@@ -120,7 +119,6 @@
           <button id="btn-resume" class="big-btn" data-i18n="resume"></button>
           <div class="row">
             <button id="btn-pause-sound" class="small-btn sound-toggle"></button>
-            <label class="lang"><span class="sr" data-i18n="language"></span><select class="lang-select small-btn"></select></label>
             <button id="btn-quit" class="small-btn" data-i18n="quit"></button>
           </div>
           <div class="row story-only">
@@ -144,6 +142,9 @@
           <button id="btn-home" class="small-btn" data-i18n="quit"></button>
         </div>
       </section>
+
+      <!-- the one language switch: pinned top-right on every screen (intro, map, in game, menus); Korean by default -->
+      <label id="lang-top" class="lang-top"><span class="globe" aria-hidden="true">🌐</span><span class="lang-name"></span><span class="lang-code"></span><select class="lang-select" data-i18n-aria="language"></select></label>
     </div>
 
     <!-- touch devices only: six buttons, all usable at once -->
