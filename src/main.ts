@@ -202,6 +202,10 @@ function begin() {
   audio.play('start');
 }
 
+/** the incoming building's name banner (real time; it never holds the game up) */
+const WAVE_CARD_MS = 1500;
+let waveCardAt = -1, waveCardFor = '';
+
 function doPause() {
   if (state.phase === 'TITLE' || state.phase === 'GAME_OVER' || state.phase === 'BOOT') return;
   if (state.phase === 'PAUSED') { doResume(); return; }
@@ -395,6 +399,7 @@ function onEvent(e: GameEvent) {
         if (img && state.building?.id === e.building.id && state.building) visual = buildVisual(state.building, renderer.worldW, renderer.scale);
       });
       bgLandmark = e.building.landmarkId;
+      waveCardAt = performance.now(); waveCardFor = e.building.id; // the name shows as a banner while it already falls
       if (e.building.elite) banners.offer('WARNING · ELITE', P.CHAIN, '#ffcc33', 30, 0.6);
       if (tutorialActive && hintStep === 0) { hintStep = 1; showHint(t('hint1'), 1800); }
       break;
@@ -496,10 +501,10 @@ function frame(now: number) {
     titleShowcase: state.phase === 'TITLE' && !$('ov-title').classList.contains('hidden') ? { lang } : undefined,
     flash: effects.flash, redFlash: effects.red, cutin: effects.cutin, reducedMotion: reducedMotion || save.effectsLow,
     countdown: state.phase === 'COUNTDOWN' ? state.countdown : null,
-    waveCard: state.phase === 'WAVE_TRANSITION' && b ? {
+    waveCard: b && waveCardAt >= 0 && waveCardFor === b.id && performance.now() - waveCardAt < WAVE_CARD_MS ? {
       name: landmarkById(b.landmarkId).names[lang], elite: b.elite,
       eliteLabel: state.story ? t('finalBuilding') : 'ELITE',
-      k: 1 - state.phaseMs / (state.story && b.elite ? BALANCE.finalIntroMs : state.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs),
+      k: (performance.now() - waveCardAt) / WAVE_CARD_MS,
       sub: state.story
         ? `${t('level').toUpperCase()} ${state.story.level} · ${state.story.waveIndex + 1} / ${state.story.waveCount} · ${b.floors.length} ${t('floors')}`
         : `${landmarkById(b.landmarkId).names.en.toUpperCase()} · ${b.floors.length} ${t('floors')} · TIER ${b.tier}`,

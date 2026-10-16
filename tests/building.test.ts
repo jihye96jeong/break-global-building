@@ -52,7 +52,7 @@ describe('floor destruction (spec §5.2)', () => {
     const ev = takeEvents(s);
     expect(ev.filter((e) => e.t === 'building')).toHaveLength(1);
     expect(s.destroyedBuildings).toBe(1);
-    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect(s.phase).toBe('PLAYING');
     expect(s.building!.id).not.toBe('test');
   });
 });

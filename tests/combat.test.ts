@@ -47,7 +47,7 @@ describe('combo, score, special (spec §7)', () => {
     for (let t = 0; t < 2 && s.phase === 'SPECIAL'; t += DT) tick(s, DT);
     expect(b.floors).toHaveLength(0);
     expect(b.defeated).toBe(true);
-    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect(s.phase).toBe('PLAYING');
   });
 
   it('T27 special pays each floor once at 65% and never twice', () => {

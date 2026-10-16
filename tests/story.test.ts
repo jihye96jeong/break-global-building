@@ -142,7 +142,7 @@ describe('v5 story run flow (§5)', () => {
     clearWithSpecial(s);
     clearWithSpecial(s);
     expect(s.story!.wavesCleared).toBe(2);
-    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect(s.phase).toBe('PLAYING');
     clearWithSpecial(s);
     let ev: GameEvent[] = [];
     for (let i = 0; i < 60; i++) ev = ev.concat(step(s));

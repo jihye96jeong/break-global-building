@@ -508,16 +508,18 @@ export class Renderer {
 
   private drawWaveCard(c: { name: string; sub: string; elite: boolean; eliteLabel?: string; k: number }) {
     const g = this.g;
-    const a = c.k < 0.2 ? c.k / 0.2 : c.k > 0.8 ? (1 - c.k) / 0.2 : 1;
-    g.save();
-    g.globalAlpha = a;
-    g.fillStyle = 'rgba(20,16,40,0.55)';
-    g.fillRect(0, WORLD_H * 0.36, this.worldW, 96);
-    g.restore();
+    // a compact name pill just under the HUD: the game keeps running behind it and it never covers the lanes for long
+    const a = c.k < 0.12 ? c.k / 0.12 : c.k > 0.75 ? Math.max(0, (1 - c.k) / 0.25) : 1;
+    const y0 = 66;
     g.save(); g.globalAlpha = a;
-    if (c.elite) this.bigText(c.eliteLabel ?? 'ELITE', WORLD_H * 0.36 + 18, 20, '#ffcc33');
-    this.bigText(c.name, WORLD_H * 0.36 + 52, 40, '#ffffff');
-    this.bigText(c.sub, WORLD_H * 0.36 + 82, 15, '#d8d2ff');
+    g.font = '900 italic 26px "Arial Black", Impact, system-ui, sans-serif';
+    const w = Math.max(g.measureText(c.name).width, c.sub.length * 7.2) + 48;
+    g.fillStyle = 'rgba(20,16,40,0.6)';
+    g.beginPath(); g.roundRect(this.worldW / 2 - w / 2, y0, w, c.elite ? 74 : 58, 14); g.fill();
+    let ty = y0 + 4;
+    if (c.elite) { this.bigText(c.eliteLabel ?? 'ELITE', ty + 10, 14, '#ffcc33'); ty += 16; }
+    this.bigText(c.name, ty + 20, 26, '#ffffff');
+    this.bigText(c.sub, ty + 43, 12, '#d8d2ff');
     g.restore();
   }
 

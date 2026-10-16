@@ -379,10 +379,11 @@ describe('FLOW — after a break the building pops up a little and the hero land
     const s = leapAndHit([1, 1, 1], 1); // one floor: breaking it clears the building
     expect(s.player.y).toBeGreaterThan(100);
     step(s, { attack: true, attackPressed: true });
-    expect(s.phase).toBe('WAVE_TRANSITION');
-    while (s.phase === 'WAVE_TRANSITION') step(s, { attack: true });
-    expect(s.phase).toBe('PLAYING');
-    expect(s.player.y).toBe(0);
+    expect(s.phase).toBe('PLAYING'); // the next building falls at once, no pause for its name
+    let i = 0;
+    while (s.player.y > 0 && i++ < 60) step(s, { attack: true });
+    expect(s.player.y).toBe(0); // landed within a second
+    expect(s.building!.floors.length).toBeGreaterThan(0);
   });
 });
 
@@ -438,11 +439,11 @@ describe('UP — ↑ always gets you up there fast', () => {
   it('UP-04 holding ↑ between buildings never stalls the next one', () => {
     const s = playing(building([floor([1, 1, 1], 1, 30)], CONTACT_Y_T));
     attack(s); // clears the building
-    expect(s.phase).toBe('WAVE_TRANSITION');
-    let i = 0;
-    while (s.phase === 'WAVE_TRANSITION' && i++ < 200) step(s, { jump: true, jumpPressed: i % 10 === 0 });
-    expect(s.phase).toBe('PLAYING');
-    expect(s.player.y).toBe(0);
+    expect(s.phase).toBe('PLAYING'); // no hand-over pause at all
+    const b = s.building!, y0 = b.bottomY;
+    for (let i = 0; i < 20; i++) step(s, { jump: true, jumpPressed: i % 10 === 0 });
+    expect(s.building).toBe(b);
+    expect(b.bottomY).toBeGreaterThan(y0); // already falling
   });
 });
 
@@ -495,7 +496,7 @@ describe('CR — crush: one life, the hero buried under the building, Z breaks o
     const s = playing(building([floor([3, 3, 3])], DANGER_Y - 5));
     untilBuried(s);
     step(s, { attack: true, attackPressed: true });
-    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect(s.phase).toBe('PLAYING');
     expect(s.building!.id).not.toBe('test');
   });
 
@@ -534,7 +535,7 @@ describe('SP — v4 special sweep', () => {
     expect(s.score).toBe(scoreAfterStart); // paid once, at the start
     expect(s.special).toBe(0);
     expect(b.floors).toHaveLength(0);
-    expect(s.phase).toBe('WAVE_TRANSITION');
+    expect(s.phase).toBe('PLAYING');
     expect(s.building).not.toBe(b);
   });
 

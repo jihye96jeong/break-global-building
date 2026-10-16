@@ -322,9 +322,15 @@ function nextBuilding(s: RunState) {
   endGuard(s); // a fresh building never inherits an old guard episode
   s.specialSeq = null;
   dropToGround(s); // every building starts with the hero on the ground
-  s.phase = 'WAVE_TRANSITION';
-  s.phaseMs = s.buildingIndex <= 3 ? BALANCE.waveGapMs : BALANCE.waveGapFastMs;
-  if (st && st.waveIndex === st.waveCount - 1 && stageFor(st.level).finalIntro) s.phaseMs = BALANCE.finalIntroMs; // FINAL BUILDING card (physics paused)
+  if (s.buildingIndex <= 1) {
+    // the very first building of a run: a short name card while the game has not started yet
+    s.phase = 'WAVE_TRANSITION';
+    s.phaseMs = BALANCE.waveGapMs;
+  } else {
+    // every later building falls at once: its name card is only a banner, the action never stops for it
+    s.phase = 'PLAYING';
+    s.phaseMs = 0;
+  }
   s.events.push({ t: 'wave', building: b });
   if (!st && b.tier > prevTier) s.events.push({ t: 'speedUp', tier: b.tier, fallSpeed: b.baseSpeed });
 }
