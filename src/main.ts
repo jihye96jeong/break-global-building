@@ -1,21 +1,25 @@
 import './style.css';
 import { AudioManager } from './audio/audio';
-import { BALANCE } from './config/balance';
+import { BALANCE, DANGER_Y, GROUND_Y } from './config/balance';
+import { CAMERA_FEEL, COMBO_TIERS, DEBRIS_FEEL } from './config/gameFeel';
 import { LANDMARKS, landmarkById } from './config/landmarks';
 import { buildingRng, pickLandmark } from './core/building';
-import { newRun, pause, resume, startRun, takeEvents, tick, tierOf, type GameEvent, type RunState } from './core/game';
+import { guardPlaneY, newRun, pause, resume, startRun, takeEvents, tick, tierOf, type GameEvent, type RunState } from './core/game';
 import { loadSave, recordRun, writeSave } from './core/persistence';
 import { applyDom, lang, LANG_LABEL, LANGS, onLangChange, setLang, t, type Lang } from './i18n';
 import { Input } from './input';
 import { imageNow, loadImage, preload } from './render/assets';
 import { buildVisual, type BuildingVisual } from './render/landmark';
 import { NINJA_SPRITES } from './render/character';
+import { Banners, BANNER_PRIORITY as P, Camera } from './render/camera';
+import { mountDebugPanel } from './debug';
 import { Particles } from './render/particles';
 import { Renderer, type FrameFx } from './render/renderer';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const STEP = 1 / 60;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const debugFeel = new URLSearchParams(location.search).has('debugFeel');
 
 const save = loadSave();
 const audio = new AudioManager();
@@ -23,13 +27,24 @@ audio.enabled = save.sound;
 const input = new Input();
 const renderer = new Renderer($<HTMLCanvasElement>('view'));
 const fx = new Particles();
+const camera = new Camera();
+const banners = new Banners();
 const state: RunState = newRun(Date.now() >>> 0);
 state.phase = 'BOOT';
 
 let visual: BuildingVisual | null = null;
 let bgLandmark = LANDMARKS[0].id;
-const effects = { shake: 0, shakeMs: 0, flash: 0, red: 0, cutin: 0, hitStop: 0 };
+const effects = { flash: 0, red: 0, cutin: 0, recoil: 0, recoilMs: 0, danger: 0 };
 const pendingBursts: { at: number; fn: () => void }[] = [];
+const eventLog: string[] = []; // debug panel only
+
+/** Effects LOW (or reduced motion): no camera shake, fewer particles. Game rules never change. */
+function applyEffectsLevel() {
+  const low = reducedMotion || save.effectsLow;
+  camera.scale = low ? 0 : 1;
+  fx.low = low;
+  fx.cap = low || matchMedia('(pointer: coarse)').matches ? DEBRIS_FEEL.maxParticlesMobile : DEBRIS_FEEL.maxParticlesDesktop;
+}
 let hintStep = 0, hintTimer = 0, hint3Shown = false, tutorialActive = !save.tutorialSeen;
 
 // ---------------------------------------------------------------- HUD
@@ -117,7 +132,7 @@ function toTitle() {
 function begin() {
   audio.unlock();
   input.clear();
-  fx.clear();
+  fx.clear(); camera.clear(); banners.clear();
   pendingBursts.length = 0;
   startRun(state, (Date.now() ^ (Math.random() * 1e9)) >>> 0);
   last.lives = -1; last.score = -1; last.combo = -1; last.special = -1; last.guard = -1; last.bid = '';
@@ -153,8 +168,8 @@ function syncSound() {
   $('btn-mute').setAttribute('aria-pressed', String(!audio.enabled));
 }
 
-// ---------------------------------------------------------------- events → effects
-function shake(mag: number, ms: number) { if (mag >= effects.shake || effects.shakeMs <= 0) { effects.shake = mag; effects.shakeMs = ms; } }
+// ---------------------------------------------------------------- events → effects (v2 §11 effect director)
+const kick = (k: { amp: number; ms: number }, dx = 0, dy = 1) => camera.kick(k.amp, k.ms, dx, dy);
 
 function floorWorldRect(bottomY: number, height: number) {
   const w = visual?.width ?? 300;
@@ -164,64 +179,113 @@ function floorWorldRect(bottomY: number, height: number) {
 function onEvent(e: GameEvent) {
   const p = state.player;
   const lx = renderer.laneX(p.lane);
+  const b = state.building;
+  const material = landmarkById(b?.landmarkId ?? bgLandmark).material;
+  if (debugFeel) { eventLog.unshift(`${(state.timeMs / 1000).toFixed(2)} ${e.t} g=${state.guardPhase} b=${b ? b.bottomY.toFixed(1) : '-'} gap=${b ? (guardPlaneY(state) - b.bottomY).toFixed(1) : '-'} y=${p.y.toFixed(0)}`); eventLog.length = Math.min(eventLog.length, 10); }
   switch (e.t) {
     case 'countdown': audio.play('crack'); break;
-    case 'jump': audio.play('swing'); break;
-    case 'whiff': audio.play('swing'); break;
+    case 'jump':
+      audio.play('jump');
+      fx.smoke(lx, GROUND_Y, 4, 'rgba(232,222,204,', 0.8);
+      break;
+    case 'land':
+      audio.play('land');
+      fx.smoke(lx, GROUND_Y, e.fromHeight > 120 ? 6 : 3, 'rgba(232,222,204,', 0.9);
+      if (e.fromHeight > 120) kick(CAMERA_FEEL.land);
+      break;
+    case 'swing': {
+      // the slash arc starts on the same tick as the hit judgement
+      const head = GROUND_Y - BALANCE.heroHeight - p.y;
+      fx.slash(lx, head, e.variant, p.facing, state.combo);
+      audio.play('swing');
+      break;
+    }
+    case 'whiff': break;
     case 'hit': {
-      const by = state.building?.bottomY ?? 200;
-      const headY = 530 - BALANCE.heroHeight - p.y;
-      fx.streak(lx, Math.min(by, headY), headY);
-      fx.sparks(lx, by, 3 + Math.floor(Math.random() * 6));
-      fx.pop(lx + 28, by - 6, `+${e.score}`, 15, '#d6ecff');
-      audio.play('hit', { pitch: 1 + Math.min(state.combo, 30) * 0.02 });
-      if (e.hpLeft > 0) audio.play('crack');
-      shake(2.5, 80);
+      const by = state.building?.bottomY ?? e.floor.height;
+      const head = GROUND_Y - BALANCE.heroHeight - p.y;
+      fx.streak(lx, Math.min(by, head), head, 'rgba(220,240,255,.95)', 9, 0.06);
+      audio.play('hit', { pitch: 1 + Math.min(state.combo, 40) * 0.012 });
+      if (e.hpLeft > 0) {
+        const fv = visual?.floors.get(e.floor.id);
+        fx.damage(lx, by, e.hpLeft, fv?.color ?? '#999', material);
+        audio.play(e.hpLeft === 1 ? 'crack' : 'stone', { pitch: e.hpLeft === 1 ? 1.2 : 1.6 });
+        kick(e.hpBefore === 2 ? CAMERA_FEEL.heavyHit : CAMERA_FEEL.hit, p.facing * -0.6, 1);
+      } else kick(CAMERA_FEEL.hit, p.facing * -0.6, 1);
+      fx.pop(lx + 30, by - 4, `+${e.score}`, 14, '#d6ecff');
+      if (e.counter) banners.offer('COUNTER!', P.CLUTCH - 0.5, '#8ff0ff', 28);
       break;
     }
     case 'floor': {
       const fv = visual?.floors.get(e.floor.id);
       const r = floorWorldRect(e.bottomY, e.floor.height);
-      if (fv) fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, 3 + Math.floor(Math.random() * 3));
-      fx.pop(lx, r.y - 8, `+${e.score}`, 24);
+      if (fv) fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, material, lx, e.last ? 1.25 : 1);
+      fx.sparks(lx, e.bottomY, 10, ['#ffffff', '#fff3b0']);
+      fx.pop(lx, r.y - 6, `+${e.score}`, 24);
+      audio.play(material);
       audio.play('crumble');
-      shake(5, 120);
+      kick(CAMERA_FEEL.floor, (Math.random() - 0.5) * 0.8, 1);
+      effects.recoil = DEBRIS_FEEL.recoilUnits; effects.recoilMs = DEBRIS_FEEL.recoilMs; // render-only lift of what remains
+      if (e.last && e.aerial) banners.offer('AERIAL FINISH!', P.FINISH, '#ffe066', 38);
+      else if (e.chain >= 3) banners.offer(`CHAIN CUT! ×${e.chain}`, P.CHAIN, '#ffd28a', 30);
+      else if (e.oneHit) banners.offer('ONE HIT BREAK!', P.NORMAL, '#fff6c2', 26);
       if (tutorialActive && hintStep === 1) { hintStep = 2; showHint(t('hint2'), 1800); }
       break;
     }
     case 'building': {
-      fx.pop(renderer.worldW / 2, 220, `+${e.bonus}`, 36, '#ffe066');
-      if (e.elite) fx.pop(renderer.worldW / 2, 180, 'ELITE CLEAR', 30, '#ffcc33');
-      audio.play('clear');
-      shake(8, 260);
+      const cx = renderer.worldW / 2;
+      fx.ring(cx, e.building.bottomY, 220, 'rgba(255,240,180,.95)', 0.45, 10, 0.4);
+      fx.pop(cx, 230, `+${e.bonus}`, 34, '#ffe066');
+      banners.offer(e.elite ? 'ELITE CLEAR!' : lang === 'ko' ? '완파!' : 'DESTROYED!', P.FINISH - 0.5, '#ffe066', 44, 0.9);
+      audio.play('finish');
+      kick(CAMERA_FEEL.building, 0, 1);
       break;
     }
     case 'guardContact': {
-      fx.ring(lx, 530 - BALANCE.heroHeight - p.y, 70, '#8ff0ff', 0.35, 6);
-      if (e.kind === 'ground') { fx.ring(lx, 528, 120, '#bff3ff', 0.4, 8); shake(6, 160); }
-      fx.pop(lx, 400, e.kind === 'air' ? 'AIR GUARD · COMBO KEEP' : 'GUARD!', e.kind === 'air' ? 18 : 22, '#8ff0ff');
-      audio.play('hit', { pitch: e.kind === 'air' ? 0.9 : 0.55 });
-      audio.play('crack');
+      // spark burst exactly at the contact point between the sword and the underside
+      fx.sparks(lx, e.planeY, 9, ['#ffffff', '#bff3ff', '#8ff0ff']);
+      fx.ring(lx, e.planeY, 40, '#bff3ff', 0.18, 5, 0.35);
+      audio.play(e.kind === 'ground' ? 'guardThud' : 'guardClang');
+      kick(e.kind === 'ground' ? CAMERA_FEEL.guardGround : CAMERA_FEEL.guardAir, 0, 1);
+      if (state.lives === 1) banners.offer('CLUTCH!', P.CLUTCH, '#8ff0ff', 30);
+      else banners.offer(e.kind === 'air' ? 'AIR GUARD · COMBO KEEP' : 'GUARD!', P.NORMAL, '#8ff0ff', e.kind === 'air' ? 22 : 26, 0.6);
       break;
     }
-    case 'guardBreak': fx.pop(lx, 420, 'GUARD BREAK', 22, '#ff6b5e'); audio.play('swing'); break;
-    case 'lifeLost': effects.red = 1; shake(11, 320); audio.play('hurt'); audio.play('ultBoom'); break;
-    case 'specialReady': audio.play('gaugeFull'); break;
-    case 'combo': { const el = $('combo'); el.classList.remove('big'); void el.offsetWidth; el.classList.add('big'); fx.pop(renderer.worldW / 2, 260, `${e.combo} COMBO!`, 34 + Math.min(e.combo, 100) * 0.1, '#ffe066'); audio.play('combo', { pitch: 1.2 }); break; }
+    case 'guardRepel': {
+      const y = guardPlaneY(state);
+      audio.play('repel');
+      fx.ring(lx, y, e.kind === 'ground' ? 120 : 70, 'rgba(191,243,255,.9)', 0.3, e.kind === 'ground' ? 8 : 5, 0.3);
+      fx.smoke(lx, state.building?.bottomY ?? y, e.kind === 'ground' ? 6 : 3, 'rgba(232,222,204,', 0.9);
+      if (e.kind === 'ground') fx.smoke(lx, GROUND_Y, 4);
+      break;
+    }
+    case 'guardRelease': break;
+    case 'guardBreak': banners.offer('GUARD BREAK', P.CLUTCH, '#ff6b5e', 28); audio.play('swing'); break;
+    case 'danger': effects.danger = 1; audio.play('danger'); break;
+    case 'lifeLost': effects.red = 1; kick(CAMERA_FEEL.damage, 0, 1); audio.play('hurt'); audio.play('stone'); break;
+    case 'specialReady': audio.play('gaugeFull'); banners.offer('SPECIAL READY', P.NORMAL, '#ffcc33', 26); break;
+    case 'combo': {
+      const el = $('combo'); el.classList.remove('big'); void el.offsetWidth; el.classList.add('big');
+      const tierText = COMBO_TIERS.find((c) => e.combo >= c.at)!;
+      banners.offer(tierText.text === 'COMBO' ? `${e.combo} COMBO` : tierText.text, P.COMBO, '#ffe066', 30 + Math.min(e.combo, 100) * 0.08);
+      audio.play('stinger', { pitch: 1 + COMBO_TIERS.length * 0.02 - COMBO_TIERS.indexOf(tierText) * 0.05 });
+      break;
+    }
     case 'special': {
-      effects.cutin = 1; effects.flash = 1; effects.hitStop = 80;
+      effects.cutin = 1; effects.flash = 0.8;
       audio.play('ultCharge');
+      if (e.clutch) banners.offer('CLUTCH!', P.CLUTCH, '#8ff0ff', 30);
+      banners.offer('FULL BREAK!', P.SPECIAL, '#fff3b0', 46, 0.8);
       // the floors are already gone in the game state; here they burst one after another, bottom to top
       let bottom = e.bottomY;
       const v = visual;
       e.floors.forEach((f, i) => {
-        const b = bottom, fv = v?.floors.get(f.id);
+        const bb = bottom, fv = v?.floors.get(f.id);
         bottom -= f.height;
-        pendingBursts.push({ at: state.timeMs + 120 + i * (420 / Math.max(1, e.floors.length)), fn: () => {
-          const r = floorWorldRect(b, f.height);
-          if (fv) fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, 3, 1.3);
-          if (i === 0) { audio.play('ultBoom'); shake(10, 500); }
-          else audio.play('crumble');
+        pendingBursts.push({ at: effectClock + 150 + i * (380 / Math.max(1, e.floors.length)), fn: () => {
+          const r = floorWorldRect(bb, f.height);
+          if (fv) fx.burstFloor(fv.canvas, r.x, r.y - fv.padTop, r.w, r.h + fv.padTop + fv.padBottom, landmarkById(e.landmarkId).debrisPalette, material, renderer.worldW / 2, 1.3);
+          if (i === 0) { audio.play('ultBoom'); kick(CAMERA_FEEL.special, 0, 1); } else if (i % 2 === 0) audio.play(material);
         } });
       });
       fx.pop(renderer.worldW / 2, 300, `+${e.score}`, 34, '#ffe066');
@@ -234,6 +298,7 @@ function onEvent(e: GameEvent) {
         if (img && state.building?.id === e.building.id && state.building) visual = buildVisual(state.building, renderer.worldW, renderer.scale);
       });
       bgLandmark = e.building.landmarkId;
+      if (e.building.elite) banners.offer('WARNING · ELITE', P.CHAIN, '#ffcc33', 30, 0.6);
       if (tutorialActive && hintStep === 0) { hintStep = 1; showHint(t('hint1'), 1800); }
       break;
     }
@@ -253,30 +318,40 @@ function onEvent(e: GameEvent) {
 }
 
 // ---------------------------------------------------------------- loop
+// Gameplay advances in fixed 1/60 s steps (and pauses itself during hit-stop); effects run on real time so
+// sparks, shake and debris keep moving through a hit-stop (v2 §11.2).
 let acc = 0;
 let lastFrame = performance.now();
+let effectClock = 0;
+const MAX_STEPS = 5;
 
 function frame(now: number) {
   const dt = Math.min(0.05, Math.max(0, (now - lastFrame) / 1000)); // clamp: no runaway after a background tab
   lastFrame = now;
   const running = state.phase !== 'PAUSED' && state.phase !== 'TITLE' && state.phase !== 'BOOT';
   if (running) {
-    if (effects.hitStop > 0) effects.hitStop -= dt * 1000;
-    else acc += dt;
-    while (acc >= STEP) {
+    acc += dt;
+    let steps = 0;
+    while (acc >= STEP && steps < MAX_STEPS) {
       tick(state, STEP, input.take());
       for (const e of takeEvents(state)) onEvent(e);
-      fx.update(STEP);
-      for (let i = pendingBursts.length - 1; i >= 0; i--) if (state.timeMs >= pendingBursts[i].at) { pendingBursts[i].fn(); pendingBursts.splice(i, 1); }
-      acc -= STEP;
+      banners.flush();
+      acc -= STEP; steps++;
     }
-    effects.shakeMs = Math.max(0, effects.shakeMs - dt * 1000);
-    if (effects.shakeMs <= 0) effects.shake = 0;
+    if (steps === MAX_STEPS) acc = 0;
+    effectClock += dt * 1000;
+    fx.update(dt);
+    camera.update(dt * 1000);
+    banners.update(dt);
+    for (let i = pendingBursts.length - 1; i >= 0; i--) if (effectClock >= pendingBursts[i].at) { pendingBursts[i].fn(); pendingBursts.splice(i, 1); }
     effects.flash = Math.max(0, effects.flash - dt * 4);
     effects.red = Math.max(0, effects.red - dt * 2.5);
+    effects.danger = Math.max(0, effects.danger - dt * 1.6);
+    effects.recoilMs = Math.max(0, effects.recoilMs - dt * 1000);
+    effects.recoil = DEBRIS_FEEL.recoilUnits * Math.sin((effects.recoilMs / DEBRIS_FEEL.recoilMs) * Math.PI) * (effects.recoilMs > 0 ? 1 : 0);
     effects.cutin = state.phase === 'SPECIAL_CUTIN' ? Math.min(1, state.phaseMs / 200) : Math.max(0, effects.cutin - dt * 4);
     // tutorial hint 3: when the building first gets close
-    if (tutorialActive && !hint3Shown && hintStep >= 1 && state.building && state.building.bottomY > 530 - 150 && state.phase === 'PLAYING') {
+    if (tutorialActive && !hint3Shown && hintStep >= 1 && state.building && state.building.bottomY > DANGER_Y - 110 && state.phase === 'PLAYING') {
       hint3Shown = true; showHint(t('hint3'), 2000);
     }
     if (hintTimer > 0) { hintTimer -= dt * 1000; if (hintTimer <= 0) $('hint').classList.add('hidden'); }
@@ -285,7 +360,8 @@ function frame(now: number) {
 
   const b = state.building;
   const fxState: FrameFx = {
-    shake: effects.shake, flash: effects.flash, redFlash: effects.red, cutin: effects.cutin, reducedMotion,
+    camera, banners, recoil: effects.recoil, danger: effects.danger, debug: debugFeel,
+    flash: effects.flash, redFlash: effects.red, cutin: effects.cutin, reducedMotion: reducedMotion || save.effectsLow,
     countdown: state.phase === 'COUNTDOWN' ? state.countdown : null,
     waveCard: state.phase === 'WAVE_TRANSITION' && b ? {
       name: landmarkById(b.landmarkId).names[lang], elite: b.elite, k: 1 - state.phaseMs / BALANCE.waveGapMs,
@@ -294,8 +370,10 @@ function frame(now: number) {
     showHp: save.showHpNumbers,
   };
   renderer.draw(state, visual, fx, fxState, state.phase === 'TITLE' ? now : state.timeMs, bgLandmark);
+  if (debugFeel) debugTick();
   requestAnimationFrame(frame);
 }
+let debugTick = () => {};
 
 // ---------------------------------------------------------------- wiring
 function layout() {
@@ -325,11 +403,13 @@ function bind() {
   click('btn-help', () => {
     $<HTMLInputElement>('opt-tutorial').checked = !save.tutorialSeen;
     $<HTMLInputElement>('opt-hp').checked = save.showHpNumbers;
+    $<HTMLInputElement>('opt-fx').checked = save.effectsLow;
     $('ov-help').classList.remove('hidden');
   });
   document.querySelectorAll<HTMLElement>('[data-close]').forEach((b) => b.addEventListener('click', () => $(b.dataset.close!).classList.add('hidden')));
   $<HTMLInputElement>('opt-tutorial').addEventListener('change', (e) => { save.tutorialSeen = !(e.target as HTMLInputElement).checked; writeSave(save); });
   $<HTMLInputElement>('opt-hp').addEventListener('change', (e) => { save.showHpNumbers = (e.target as HTMLInputElement).checked; writeSave(save); });
+  $<HTMLInputElement>('opt-fx').addEventListener('change', (e) => { save.effectsLow = (e.target as HTMLInputElement).checked; writeSave(save); applyEffectsLevel(); });
   input.onGesture = () => audio.unlock();
   input.onSystem = (a) => (a === 'pause' ? doPause() : toggleSound());
   input.bind($('pb-left'), 'left'); input.bind($('pb-right'), 'right');
@@ -353,6 +433,8 @@ function bind() {
 
 async function boot() {
   bind();
+  applyEffectsLevel();
+  if (debugFeel) debugTick = mountDebugPanel({ state, eventLog, camera, fx, startTest: () => { if (state.phase === 'TITLE' || state.phase === 'GAME_OVER') begin(); } });
   syncSound();
   layout();
   // the title shows at once; images stream in, and any that fail are drawn with fallback shapes

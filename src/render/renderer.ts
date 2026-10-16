@@ -1,7 +1,9 @@
 // Canvas drawing in world units: the world is 600 tall; its width follows the screen's aspect (spec §11.1).
-import { BALANCE, GROUND_Y, WORLD_H } from '../config/balance';
+import { BALANCE, DANGER_Y, GROUND_Y, WORLD_H } from '../config/balance';
+import { JUMP_FEEL } from '../config/gameFeel';
 import { landmarkById } from '../config/landmarks';
-import type { RunState } from '../core/game';
+import { guardPlaneY, type RunState } from '../core/game';
+import type { Banners, Camera } from './camera';
 import { imageNow } from './assets';
 import { drawHero } from './character';
 import { refreshMarks, type BuildingVisual } from './landmark';
@@ -10,7 +12,11 @@ import type { Particles } from './particles';
 const SKY_GRAD: Record<string, [string, string]> = { day: ['#7cc4f2', '#d9f0ff'], sunset: ['#ff9a62', '#ffe0b0'], night: ['#0d1638', '#33407a'] };
 
 export interface FrameFx {
-  shake: number;
+  camera: Camera;
+  banners: Banners;
+  recoil: number; // render-only upward kick of the building after a floor break (wu)
+  danger: number; // 0..1 DANGER pulse
+  debug: boolean;
   flash: number; // 0..1 white flash
   redFlash: number; // 0..1 hurt tint
   cutin: number; // 0..1 special cut-in strength
@@ -56,13 +62,16 @@ export class Renderer {
     const g = this.g;
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.save();
-    if (f.shake > 0 && !f.reducedMotion) g.translate((Math.random() * 2 - 1) * f.shake, (Math.random() * 2 - 1) * f.shake);
-    else if (f.shake > 0) g.translate((Math.random() * 2 - 1) * f.shake * 0.25, 0);
+    g.translate(f.camera.x, f.camera.y); // world layer only: hero and building shake together, HUD stays put
     this.drawBackground(bgLandmarkId);
 
     const b = s.building;
     if (visual) this.laneGap += (visual.width / 3 - this.laneGap) * 0.2;
-    if (b && visual && visual.buildingId === b.id && !b.defeated) this.drawBuilding(s, visual, time, f.showHp);
+    if (b && visual && visual.buildingId === b.id && !b.defeated) {
+      g.save(); g.translate(0, -f.recoil);
+      this.drawBuilding(s, visual, time, f.showHp);
+      g.restore();
+    }
 
     fx.draw(g);
     const p = s.player;
@@ -70,13 +79,31 @@ export class Renderer {
     const ease = 1 - (1 - k) * (1 - k);
     const x = this.laneX(p.laneFrom) + (this.laneX(p.lane) - this.laneX(p.laneFrom)) * ease;
     const invuln = s.invulnMs > 0 && s.phase !== 'SPECIAL_CUTIN';
+    const c = s.guardContact;
+    const guardK = c ? Math.min(1, c.phaseMs / (s.guardPhase === 'HOLD' ? 120 : s.guardPhase === 'REPEL' ? 200 : 80)) : 0;
+    const ceiling = b && !b.defeated ? Math.max(0, GROUND_Y - p.y - b.bottomY) : Infinity;
+    // rising speed lines and falling streaks
+    if (p.y > 20 && !f.reducedMotion) {
+      g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 2;
+      const n = p.vy > 0 ? 2 : p.vy < -400 ? 4 : 0;
+      for (let i = 0; i < n; i++) { const ox = (i - (n - 1) / 2) * 12; const top = GROUND_Y - p.y + (p.vy > 0 ? 6 : -BALANCE.heroHeight - 26); g.beginPath(); g.moveTo(x + ox, top); g.lineTo(x + ox, top + 22); g.stroke(); }
+    }
+    // pressure near the hero when the building is about to land on them
+    if (b && !b.defeated && s.phase === 'PLAYING' && DANGER_Y - b.bottomY < 40 && s.guardPhase !== 'HOLD' && s.guardPhase !== 'REPEL') {
+      g.strokeStyle = 'rgba(255,90,70,.7)'; g.lineWidth = 2;
+      for (let i = -2; i <= 2; i++) { const xx = x + i * 14, yy = GROUND_Y - BALANCE.heroHeight - p.y - 10 - Math.abs(i) * 3; g.beginPath(); g.moveTo(xx, yy); g.lineTo(xx + i * 3, yy - 10); g.stroke(); }
+    }
     drawHero(g, {
       x, y: p.y, facing: p.facing,
       attackK: p.attackAnimMs > 0 ? 1 - p.attackAnimMs / BALANCE.attackAnimMs : -1,
-      guarding: p.guarding, air: p.y > 0, moving: p.laneAnimMs > 0, hurt: s.phase === 'HIT_FREEZE',
+      variant: (p.swingCount + 2) % 3,
+      guarding: p.guarding, guardPhase: s.guardPhase, guardK,
+      air: p.y > 0, rising: p.vy > 0 && p.jumpElapsed < JUMP_FEEL.takeoffStretchMs / 1000, moving: p.laneAnimMs > 0, hurt: s.phase === 'HIT_FREEZE',
+      landK: p.landMs / JUMP_FEEL.landingSquashMs,
       special: s.phase === 'SPECIAL_CUTIN' ? Math.sin(Math.min(1, 1 - s.phaseMs / BALANCE.specialCutinMs) * Math.PI) : 0,
-      time, blink: invuln && Math.floor(time / 80) % 2 === 0,
+      ceiling, time, blink: invuln && Math.floor(time / 80) % 2 === 0,
     });
+    if (f.debug) this.drawDebug(s, x);
     fx.drawPops(g);
     g.restore();
 
@@ -86,6 +113,39 @@ export class Renderer {
     if (f.redFlash > 0) { g.fillStyle = `rgba(220,30,40,${0.35 * f.redFlash})`; g.fillRect(0, 0, this.worldW, WORLD_H); }
     if (f.countdown) this.bigText(String(f.countdown), WORLD_H * 0.42, 120, '#ffe066');
     if (f.waveCard) this.drawWaveCard(f.waveCard);
+    // banners sit just under the HUD so they never cover the weak spots
+    let by = 168;
+    for (const bn of f.banners.list) {
+      const age = 1 - bn.life / bn.max;
+      const sc = age < 0.15 ? 0.7 + age / 0.15 * 0.4 : age < 0.25 ? 1.1 - (age - 0.15) : 1;
+      g.save(); g.globalAlpha = bn.life < 0.2 ? bn.life / 0.2 : 1;
+      g.translate(this.worldW / 2, by); g.scale(sc, sc);
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      g.font = `900 italic ${bn.size}px "Arial Black", Impact, system-ui, sans-serif`;
+      g.lineWidth = bn.size * 0.16; g.strokeStyle = '#1b1530'; g.strokeText(bn.text, 0, 0);
+      g.fillStyle = bn.color; g.fillText(bn.text, 0, 0);
+      g.restore();
+      by += bn.size + 8;
+    }
+    if (f.danger > 0) {
+      g.save(); g.globalAlpha = f.danger;
+      this.bigText('DANGER', GROUND_Y + 34, 26, '#ff6b5e');
+      g.restore();
+    }
+  }
+
+  private drawDebug(s: RunState, heroX: number) {
+    const g = this.g;
+    g.save();
+    g.setLineDash([6, 4]); g.lineWidth = 1.5;
+    g.strokeStyle = '#00e0ff'; g.beginPath(); g.moveTo(heroX - 60, guardPlaneY(s)); g.lineTo(heroX + 60, guardPlaneY(s)); g.stroke();
+    g.strokeStyle = '#ff4040'; g.beginPath(); g.moveTo(0, DANGER_Y); g.lineTo(this.worldW, DANGER_Y); g.stroke();
+    const b = s.building;
+    if (b && b.floors[0]) {
+      g.strokeStyle = '#7dff6a'; g.setLineDash([]);
+      g.strokeRect(this.worldW / 2 - this.laneGap * 1.5, b.bottomY - b.floors[0].height, this.laneGap * 3, b.floors[0].height);
+    }
+    g.restore();
   }
 
   private drawBackground(landmarkId: string) {
@@ -141,7 +201,8 @@ export class Renderer {
     if (!f0) return;
     for (let lane = 0; lane < 3; lane++) {
       const hp = f0.hp[lane];
-      const cx = this.laneX(lane), cy = b.bottomY + 14;
+      // inside the lowest floor, just above its underside: the guard contact point stays clear
+      const cx = this.laneX(lane), cy = b.bottomY - 11;
       const w = Math.min(46, this.laneGap * 0.7), h = 14;
       const col = hp === 1 ? '#ffd84a' : hp === 2 ? '#e9eef7' : '#5d6f94';
       const active = s.player.lane === lane;
@@ -155,7 +216,7 @@ export class Renderer {
       for (let k = 0; k < hp; k++) { g.beginPath(); g.arc(cx + (k - (hp - 1) / 2) * 9, cy, 2.6, 0, Math.PI * 2); g.fill(); }
       if (hp === 1) { g.strokeStyle = '#1b1530'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx - w / 2 + 4, cy - 3); g.lineTo(cx - 6, cy + 3); g.lineTo(cx - 2, cy - 2); g.stroke(); }
       if (active) { g.strokeStyle = '#ffffff'; g.lineWidth = 2; g.beginPath(); g.roundRect(cx - w / 2 - 4, cy - h / 2 - 4, w + 8, h + 8, 10); g.stroke(); }
-      if (showHp) { g.fillStyle = '#fff'; g.font = '900 13px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(`HP${hp}`, cx, cy + 22); }
+      if (showHp) { g.fillStyle = '#fff'; g.font = '900 13px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText(`HP${hp}`, cx, cy - 12); }
     }
   }
 

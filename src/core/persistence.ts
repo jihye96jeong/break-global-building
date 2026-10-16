@@ -7,8 +7,9 @@ export interface Save {
   sound: boolean;
   tutorialSeen: boolean;
   showHpNumbers: boolean;
+  effectsLow: boolean;
 }
-const DEFAULTS: Save = { bestScore: 0, bestCombo: 0, sound: true, tutorialSeen: false, showHpNumbers: false };
+const DEFAULTS: Save = { bestScore: 0, bestCombo: 0, sound: true, tutorialSeen: false, showHpNumbers: false, effectsLow: false };
 
 export function loadSave(): Save {
   try {

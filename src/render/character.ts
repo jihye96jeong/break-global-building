@@ -1,5 +1,6 @@
 // The hero: a deliberately simple blue stick figure with a sword, drawn in code.
 import { BALANCE, GROUND_Y } from '../config/balance';
+import { GUARD_FEEL } from '../config/gameFeel';
 import { imageNow } from './assets';
 
 /** xAI-generated ninja poses (development time, static files). The stick figure below is the fallback. */
@@ -11,6 +12,8 @@ export const NINJA_SPRITES = {
   hurt: 'assets/characters/ninja_hurt.webp',
 };
 const NINJA_H = 96; // world units, giant sword included
+const GUARD_REACH = GUARD_FEEL.guardReachAboveHead;
+const GUARD_COMPRESS = GUARD_FEEL.braceCompression;
 
 const BLUE = '#2f6bff';
 const INK = '#14123a';
@@ -18,8 +21,12 @@ const INK = '#14123a';
 export interface HeroPose {
   x: number; y: number; facing: 1 | -1;
   attackK: number; // 0..1 progress of the current swing, -1 when not swinging
-  guarding: boolean; air: boolean; moving: boolean; hurt: boolean;
+  variant: number; // which of the alternating swings
+  guarding: boolean; guardPhase: string; guardK: number; // contact phase and its progress
+  air: boolean; rising: boolean; moving: boolean; hurt: boolean;
+  landK: number; // 1 right at landing → 0
   special: number; // 0..1 rise during the special
+  ceiling: number; // world units free between the feet and the building's underside (Infinity if none)
   time: number; blink: boolean;
 }
 
@@ -27,15 +34,24 @@ function drawNinja(g: CanvasRenderingContext2D, p: HeroPose, lift: number): bool
   const pose = p.hurt ? 'hurt' : p.guarding ? 'guard' : p.attackK >= 0 || p.special > 0 ? 'attack' : p.air ? 'jump' : 'idle';
   const img = imageNow(NINJA_SPRITES[pose]);
   if (!img) return false;
-  // the attack art is tall (sword overhead): scale by height so every pose reads the same size
-  const h = pose === 'attack' ? NINJA_H * 1.25 : NINJA_H;
-  const w = h * (img.naturalWidth / img.naturalHeight);
+  // guard: the raised blade is the contact plane (hero height + reach), squeezed while bracing
+  let h = pose === 'attack' ? NINJA_H * 1.12 : pose === 'guard' ? BALANCE.heroHeight + GUARD_REACH : NINJA_H;
+  let sx = 1, sy = 1;
+  if (pose === 'guard' && p.guardPhase === 'HOLD') sy = (h - GUARD_COMPRESS * Math.min(1, p.guardK * 3)) / h;
+  if (pose === 'guard' && p.guardPhase === 'REPEL') sy = 1 + 0.06 * Math.sin(p.guardK * Math.PI);
+  if (p.landK > 0) { sy *= 1 - 0.15 * p.landK; sx *= 1 + 0.1 * p.landK; } // landing squash
+  if (p.rising && pose !== 'attack') { sy *= 1.08; sx *= 0.94; } // take-off stretch
+  // never draw into the building above: squeeze to fit the gap
+  if (p.ceiling < h * sy) sy = Math.max(0.55, p.ceiling / h);
+  h *= sy;
+  const w = h / sy * sx * (img.naturalWidth / img.naturalHeight);
   const bob = pose === 'idle' ? Math.sin(p.time * 0.006) * 1.5 : 0;
   g.save();
   g.translate(p.x, GROUND_Y - lift + bob);
   g.scale(p.facing, 1);
   if (pose === 'idle' && p.moving) g.rotate(0.08);
-  if (pose === 'attack' && p.attackK >= 0) g.translate(0, -Math.sin(p.attackK * Math.PI) * 6);
+  if (pose === 'attack' && p.attackK >= 0) g.rotate((p.variant === 1 ? -1 : 1) * 0.12 * Math.sin(p.attackK * Math.PI));
+  if (pose === 'guard' && p.guardPhase === 'HOLD') g.translate(Math.sin(p.time * 0.9) * 0.8, 0); // straining
   g.drawImage(img, -w / 2, -h, w, h);
   g.restore();
   return true;

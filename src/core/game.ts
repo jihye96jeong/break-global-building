@@ -399,7 +399,7 @@ function resolveDanger(s: RunState) {
   const b = s.building;
   if (!b || b.defeated || s.phase !== 'PLAYING' || inContact(s)) return;
   // warn once when the building would reach the hero within 0.25 s
-  if (s.dangerWarned !== b.id && b.velocityY > 0 && (DANGER_Y - b.bottomY) / b.velocityY < 0.25) { s.dangerWarned = b.id; s.events.push({ t: 'danger' }); }
+  if (s.dangerWarned !== b.id && s.guardPhase === 'OFF' && b.velocityY > 0 && (DANGER_Y - b.bottomY) / b.velocityY < 0.25) { s.dangerWarned = b.id; s.events.push({ t: 'danger' }); }
   if (b.bottomY >= DANGER_Y && s.invulnMs <= 0) {
     s.lives -= 1;
     breakCombo(s);
