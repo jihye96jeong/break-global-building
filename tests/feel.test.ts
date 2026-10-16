@@ -120,14 +120,14 @@ describe('guard contact (v2 §4)', () => {
     expect(b.velocityY).toBe(v);
   });
 
-  it('GF-06/07 contact aligns the underside with the sword and holds it still for 100–150 ms', () => {
+  it('GF-06/07 contact aligns the underside with the sword and holds it still for a short visible stop (~200 ms)', () => {
     const { log } = guardRun(10);
     const hold = log.filter((l) => l.phase === 'HOLD');
     expect(hold.length).toBeGreaterThan(0);
     for (const h of hold) { expect(Math.abs(h.bottom - h.plane)).toBeLessThanOrEqual(2); expect(h.vel).toBe(0); }
     const ms = hold.length * DT * 1000;
-    expect(ms).toBeGreaterThanOrEqual(100);
-    expect(ms).toBeLessThanOrEqual(150);
+    expect(ms).toBeGreaterThanOrEqual(160);
+    expect(ms).toBeLessThanOrEqual(230);
   });
 
   it('GF-08 a ground guard then pushes the building up 36 wu smoothly (v3; never a one-tick jump)', () => {
@@ -280,7 +280,7 @@ describe('destruction & hit-stop (v2 §5–§6)', () => {
 
   it('feel values match the v2 jump and v3 guard targets', () => {
     expect(JUMP_FEEL.jumpVelocity ** 2 / (2 * JUMP_FEEL.gravityAscending)).toBeCloseTo(203.8, 0);
-    expect(GUARD_FEEL.holdMs).toEqual({ ground: 120, air: 100 });
+    expect(GUARD_FEEL.holdMs).toEqual({ ground: 200, air: 170 });
     expect(GUARD_FEEL.repelUnits).toEqual({ ground: 36, air: 18 });
     expect(BALANCE.attackIntervalMs).toBe(95);
   });

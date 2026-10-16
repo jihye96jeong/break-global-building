@@ -46,10 +46,13 @@ export const GUARD_FEEL = {
   guardReachAboveHead: 12, // guard pose: the raised flat blade — the same height as the attack blade, so touching = touching
   braceCompression: { ground: 4, air: 2.5 },
   braceCompressionMs: 35,
-  holdMs: { ground: 120, air: 100 },
+  holdMs: { ground: 200, air: 170 }, // the building visibly stops on the blade for a moment
   repelUnits: { ground: 36, air: 18 },
   repelMs: { ground: 170, air: 140 },
   releaseBlendMs: 70,
+  postGuardSlowFactor: 0.4, // after the push it comes back down slowly (this share of its fall speed)…
+  postGuardSlowMin: 70, // …at least this (wu/s)…
+  postGuardSlowMs: 800, // …for this long, then speeds back up to its normal fall
   counterWindowMs: 500, // a real re-contact hit this soon after the push shows COUNTER! (no extra damage)
 };
 

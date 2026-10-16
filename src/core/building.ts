@@ -32,6 +32,8 @@ export interface FallingBuilding {
   velocityY: number;
   /** post-floor-break fast settle onto the blade (ms left) */
   settleMs?: number;
+  /** after a guard: a slow fall for this long (ms) before it speeds back up */
+  guardSlowMs?: number;
   /** v5 difficulty: after a hit the building creeps down at the pressure speed for this long (ms) */
   pressMs?: number;
   /** story levels set the creep speed while struck (wu/s); endless derives it from the fall speed */

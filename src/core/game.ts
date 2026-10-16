@@ -168,6 +168,8 @@ export interface RunState {
   maxCombo: number;
   special: number;
   guardPhase: GuardPhase;
+  /** one ↓ press = one guard: after a block, ↓ has to be let go and pressed again before it guards again */
+  guardSpent: boolean;
   guardContact: GuardContact | null;
   guardContacts: number; // successful guard episodes (unlimited)
   guardHeld: boolean; // debug: ↓ held this tick
@@ -199,7 +201,7 @@ export function newRun(seed: number): RunState {
   return {
     mode: 'endless', story: null, phase: 'TITLE', pausedFrom: null, phaseMs: 0, timeMs: 0, seed, buildingIndex: 0, destroyedBuildings: 0,
     recentLandmarks: [], building: null, lives: BALANCE.lives, score: 0, combo: 0, comboMs: 0, maxCombo: 0,
-    special: 0, guardPhase: 'OFF', guardContact: null, guardHeld: false, guardPressedThisTick: false, damageSequences: 0, specialSeq: null, buried: null, escape: null,
+    special: 0, guardPhase: 'OFF', guardSpent: false, guardContact: null, guardHeld: false, guardPressedThisTick: false, damageSequences: 0, specialSeq: null, buried: null, escape: null,
     guardContacts: 0, lastGuardAtMs: -1e9, swingIds: 0, contact: { attackGap: NaN, guardGap: NaN, toi: null, xOverlap: false, lastEvent: '', contactId: '' }, invulnMs: 0, freezeMs: 0, dangerWarned: '', chainLane: -1, chainCount: 0,
     player: newPlayer(), events: [], countdown: 3,
   };
@@ -635,11 +637,14 @@ function updateJump(s: RunState, dt: number, input: Intents) {
   clampUnderBuilding(s);
 }
 
-// ---------------------------------------------------------------- guard (v4 §3: unlimited, always on real contact)
+// ---------------------------------------------------------------- guard: one block per ↓ press, always on real contact
 function updateGuardInput(s: RunState, input: Intents) {
-  s.guardHeld = input.guard;
-  s.guardPressedThisTick = input.guardPressed;
-  s.player.guarding = input.guard || input.guardPressed || bracing(s);
+  // ↓ let go, or pressed afresh: the next contact guards again
+  if (!input.guard || input.guardPressed) s.guardSpent = false;
+  const live = (input.guard || input.guardPressed) && !s.guardSpent;
+  s.guardHeld = live && input.guard;
+  s.guardPressedThisTick = input.guardPressed && live;
+  s.player.guarding = live || bracing(s);
 }
 
 /**
@@ -679,6 +684,7 @@ function resolveGuardContact(s: RunState, prev: Snapshot, dt: number) {
   const segmentId = `${b.id}:${b.floors[0]?.id ?? 'x'}:${p.lane}:${s.guardContacts}`; // contact episode key
   s.guardContact = { id: s.guardContacts, kind, phaseMs: 0, repelTravelled: 0, contactY, segmentId };
   s.guardPhase = 'HOLD';
+  s.guardSpent = true; // this press is used up: holding ↓ never blocks a second time
   if (p.swing) p.swing.consumed = true; // guard wins a same-tick attack
   if (air) {
     if (s.combo > 0) s.comboMs += BALANCE.air.comboExtendMs;
@@ -719,10 +725,12 @@ function updateGuardMotion(s: RunState, dt: number) {
       s.events.push({ t: 'guardRelease' });
     }
   } else {
+    // back into a slow fall (not straight to full speed); updateFall speeds it up again once the slow spell ends
+    const slow = Math.min(b.baseSpeed, Math.max(GUARD_FEEL.postGuardSlowMin, b.baseSpeed * GUARD_FEEL.postGuardSlowFactor));
     const k = Math.min(1, c.phaseMs / GUARD_FEEL.releaseBlendMs);
-    b.velocityY = b.baseSpeed * k;
+    b.velocityY = slow * k;
     b.bottomY += b.velocityY * dt;
-    if (k >= 1) endGuard(s);
+    if (k >= 1) { endGuard(s); b.guardSlowMs = GUARD_FEEL.postGuardSlowMs; }
   }
 }
 
@@ -743,6 +751,11 @@ function updateFall(s: RunState, dt: number) {
     b.settleMs = Math.max(0, b.settleMs - dt * 1000);
     target = Math.max(CONTACT.postBreakSlowMin, b.baseSpeed * CONTACT.postBreakSlowFactor);
     accel = CONTACT.postBreakSettleAccel;
+  }
+  if (b.guardSlowMs && b.guardSlowMs > 0) {
+    // after a guard: a slow fall for a moment
+    b.guardSlowMs = Math.max(0, b.guardSlowMs - dt * 1000);
+    target = Math.min(target, Math.max(GUARD_FEEL.postGuardSlowMin, b.baseSpeed * GUARD_FEEL.postGuardSlowFactor));
   }
   b.velocityY = Math.min(target, b.velocityY + accel * dt);
   b.bottomY += b.velocityY * dt;

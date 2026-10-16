@@ -193,7 +193,7 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     }
   });
 
-  it('GD-04 650 wu/s at 30 Hz with ↓ held: swept contact, stopped at the blade, held 120 ms, no life lost', () => {
+  it('GD-04 650 wu/s at 30 Hz with ↓ held: swept contact, stopped at the blade, held ~200 ms, no life lost', () => {
     const s = guardAt(60, 650);
     let ev: GameEvent[] = [];
     for (let i = 0; i < 10 && s.guardPhase === 'OFF'; i++) ev = ev.concat(step(s, { guard: true }, 1 / 30));
@@ -202,7 +202,7 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     expect(y).toBeCloseTo(guardPlaneY(s), 5);
     let held = 0;
     while (s.guardPhase === 'HOLD') { step(s, { guard: true }, 1 / 30); if (s.guardPhase === 'HOLD') expect(s.building!.bottomY).toBe(y); held += 1000 / 30; }
-    expect(held).toBeGreaterThanOrEqual(115); expect(held).toBeLessThanOrEqual(140);
+    expect(held).toBeGreaterThanOrEqual(190); expect(held).toBeLessThanOrEqual(235);
     expect(s.lives).toBe(3);
   });
 
@@ -232,13 +232,37 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     expect(rel.length * DT * 1000).toBeLessThanOrEqual(85);
   });
 
-  it('GD-09 ↓ held for over a second: every new contact is caught again, unlimited, no re-press', () => {
+  it('GD-09 one ↓ press = one guard: holding ↓ does not block again; let go and press again and it does', () => {
     const s = guardAt(120, 300);
     let ev: GameEvent[] = [];
-    for (let t = 0; t < 3; t += DT) ev = ev.concat(step(s, { guard: true, guardPressed: t === 0 }));
-    expect(count(ev, 'guardContact')).toBeGreaterThanOrEqual(4);
-    expect(s.lives).toBe(3);
+    let i = 0;
+    while (s.guardPhase !== 'OFF' || count(ev, 'guardContact') === 0) { ev = ev.concat(step(s, { guard: true, guardPressed: i++ === 0 })); if (i > 300) break; }
+    expect(count(ev, 'guardContact')).toBe(1);
+    expect(s.player.guarding).toBe(false); // the guard lets go at once, even with ↓ still held
+    ev = [];
+    for (let t = 0; t < 3 && s.phase === 'PLAYING'; t += DT) ev = ev.concat(step(s, { guard: true }));
+    expect(count(ev, 'guardContact')).toBe(0); // still holding: no second block (crushed instead)
+    const r = guardAt(120, 300);
+    let n = 0;
+    for (let t = 0, k = 0; t < 3; t += DT, k++) {
+      const held = k % 40 < 30; // ↓ held, let go, pressed again …
+      n += count(step(r, { guard: held, guardPressed: held && k % 40 === 0 }), 'guardContact');
+    }
+    expect(n).toBeGreaterThanOrEqual(2);
     expect(Object.keys(s)).not.toContain('guard'); // no gauge in the state at all
+  });
+
+  it('GD-13 after a guard the building comes back slowly for a moment, then speeds back up', () => {
+    const s = guardAt(0, 500);
+    const b = s.building!;
+    step(s, { guard: true, guardPressed: true });
+    while (s.guardPhase !== 'OFF') step(s);
+    b.bottomY -= 400; // room to watch the whole slow spell and the speed-up before it reaches the hero
+    const slow = Math.max(GUARD_FEEL.postGuardSlowMin, 500 * GUARD_FEEL.postGuardSlowFactor);
+    for (let t = 0; t < 0.6; t += DT) { step(s); expect(b.velocityY).toBeLessThanOrEqual(slow + 1e-6); }
+    for (let i = 0; i < 24; i++) step(s); // the slow spell (0.8 s) is over …
+    expect(s.phase).toBe('PLAYING');
+    expect(b.velocityY).toBeGreaterThan(slow + 50); // … and it falls at full speed again
   });
 
   it('GD-10/11 mashing across one contact: one success per episode, ground guard resets the combo', () => {
@@ -250,7 +274,7 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     expect(s.combo).toBe(0);
   });
 
-  it('GD-12 air guard: combo kept, hold 100 ms, push 18 wu', () => {
+  it('GD-12 air guard: combo kept, hold ~170 ms, push 18 wu', () => {
     const s = playing(building(tall(6)));
     s.player.y = 100;
     const b = s.building!;
@@ -263,7 +287,7 @@ describe('GD — v4 guard: unlimited, held or pressed, always succeeds on real c
     const y0 = b.bottomY;
     let hold = 0;
     while (s.guardPhase === 'HOLD') { step(s); hold += DT * 1000; expect(b.bottomY).toBe(y0); expect(s.player.vy).toBeLessThan(0); } // the building is pinned; the hero drops away
-    expect(hold).toBeGreaterThanOrEqual(90); expect(hold).toBeLessThanOrEqual(115);
+    expect(hold).toBeGreaterThanOrEqual(160); expect(hold).toBeLessThanOrEqual(190);
     while (s.guardPhase === 'REPEL') step(s);
     expect(y0 - b.bottomY).toBeCloseTo(18, 5);
     for (let i = 0; i < 30 && s.player.y > 0; i++) step(s);
@@ -595,7 +619,7 @@ describe('VIS — judgement is independent of frame rate, camera and screen size
       while (s.guardPhase === 'HOLD') { step(s, {}, 1 / hz); hold += 1000 / hz; }
       while (s.guardPhase === 'REPEL') step(s, {}, 1 / hz);
       expect(y0 - s.building!.bottomY).toBeGreaterThan(35); // RELEASE starts falling within its first tick
-      expect(hold).toBeGreaterThanOrEqual(115); expect(hold).toBeLessThanOrEqual(140);
+      expect(hold).toBeGreaterThanOrEqual(190); expect(hold).toBeLessThanOrEqual(235);
     }
   });
 

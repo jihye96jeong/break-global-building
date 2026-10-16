@@ -8,7 +8,7 @@ function play(level: number, seed: number, useGuard: boolean, naive = false) {
   const s = newRun(seed);
   startStoryRun(s, level, seed);
   let guardHold = 0;
-  for (let t = 0; t < 120 && s.phase !== 'GAME_OVER'; t += 1 / 60) {
+  for (let t = 0; t < 180 && s.phase !== 'GAME_OVER'; t += 1 / 60) {
     const b = s.building, p = s.player;
     let input = { ...NO_INPUT };
     if (s.phase === 'BURIED') input = { ...NO_INPUT, attack: true, attackPressed: true };
