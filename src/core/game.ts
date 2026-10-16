@@ -597,14 +597,17 @@ function updateJump(s: RunState, dt: number, input: Intents) {
   else p.jumpBufferMs = Math.max(0, p.jumpBufferMs - ms);
 
 
-  // stuck to the underside: only for a moment (so a ↓ can still catch it), longer only while ↓ is held
+  // stuck to the underside: only for a moment (0.3 s), never longer. A live ↓ guards right here this tick (the
+  // underside is touching the blade) and knocks the hero down; a ↓ that can't guard (already used) just drops them.
   if (p.clinging) {
     const b = s.building;
     p.clingMs -= ms;
     const ceil = b && !b.defeated && !b.collisionDisabled ? Math.max(0, DANGER_Y - poseReach(s) - b.bottomY) : 0;
-    const keep = (p.clingMs > 0 || input.guard) && !p.dropping; // ↑ while stuck up there does nothing (never a drop)
+    const spentGuard = (input.guard || input.guardPressed) && (s.guardSpent || s.guardPhase !== 'OFF'); // ↓ that can't guard now
+    const keep = p.clingMs > 0 && !p.dropping && !spentGuard; // ↑ while stuck up there does nothing (never a drop)
     if (keep && ceil > 0 && p.y > 0) { p.y = ceil; p.vy = 0; p.peakY = Math.max(p.peakY, p.y); return; }
     p.clinging = false;
+    if (spentGuard && p.y > 0) { p.dropping = true; p.airLeap = true; p.vy = Math.min(p.vy, -JUMP_FEEL.airGuardDropVelocity); }
   }
 
   // jump: a fresh (or buffered) press, or ↑ still held on the ground — up again with no pause after landing

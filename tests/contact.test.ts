@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BALANCE, DANGER_Y, GROUND_Y } from '../src/config/balance';
-import { CONTACT, GUARD_FEEL } from '../src/config/gameFeel';
+import { CONTACT, GUARD_FEEL, JUMP_FEEL } from '../src/config/gameFeel';
 import { attack, attackSurfaceY, guardPlaneY, laneOverlap, NO_INPUT, special, sweptContact, takeEvents, tick, type GameEvent, type Intents, type RunState } from '../src/core/game';
 import type { HP } from '../src/core/building';
 import { building, CONTACT_Y as CONTACT_Y_T, floor, playing } from './helpers';
@@ -632,5 +632,44 @@ describe('VIS — judgement is independent of frame rate, camera and screen size
   it('VIS-02/04 the simulation never reads the camera, the canvas or the screen size', () => {
     const src = readFileSync(new URL('../src/core/game.ts', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     for (const word of ['camera', 'canvas', 'window', 'document', 'devicePixelRatio', 'innerWidth']) expect(src.includes(word)).toBe(false);
+  });
+});
+
+describe('STICK — the hero never hangs on the underside', () => {
+  it('STICK-01 random ↑ / ↓ mashing and holding against falling buildings: never stuck up there over the 0.3 s cling', () => {
+    let rnd = 12345;
+    const r = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
+    for (let run = 0; run < 40; run++) {
+      const s = playing(building(tall(8), 200 + r() * 100));
+      const b = s.building!;
+      b.baseSpeed = b.velocityY = 150 + r() * 400;
+      let down = false, stuck = 0, worst = 0, stuckDown = 0, worstDown = 0;
+      for (let i = 0; i < 60 * 6 && s.phase === 'PLAYING'; i++) {
+        if (r() < 0.06) down = !down; // ↓ held for a while, let go, held again …
+        const up = r() < 0.08;
+        const frozen = s.freezeMs > 0; // hit-stop pauses the cling clock too
+        step(s, { jump: up, jumpPressed: up, guard: down, guardPressed: down && r() < 0.1, attack: !down && r() < 0.3 });
+        const atUnderside = s.player.y > 0 && Math.abs(guardPlaneY(s) - b.bottomY) < 1 && s.player.vy === 0;
+        stuck = atUnderside ? stuck + (frozen ? 0 : DT) : 0;
+        stuckDown = atUnderside && down && !up ? stuckDown + DT : 0; // (a fresh ↑ is a deliberate leap back up)
+        worst = Math.max(worst, stuck); worstDown = Math.max(worstDown, stuckDown);
+      }
+      expect(worst).toBeLessThanOrEqual(JUMP_FEEL.clingMs / 1000 + 2 * DT);
+      expect(worstDown).toBeLessThanOrEqual(2 * DT); // ↓ up there: guarded and knocked down, or dropped — never hanging
+    }
+  });
+
+  it('STICK-02 ↓ held but the guard already used: touching the building drops the hero at once', () => {
+    const s = playing(building(tall(6), 300));
+    const b = s.building!;
+    b.baseSpeed = b.velocityY = 0;
+    s.guardSpent = true;
+    s.player.y = Math.max(0, DANGER_Y - CONTACT.attackReachAboveHead - b.bottomY);
+    s.player.clinging = true; s.player.clingMs = JUMP_FEEL.clingMs;
+    step(s, { guard: true });
+    expect(s.player.clinging).toBe(false);
+    let i = 0;
+    while (s.player.y > 0 && i++ < 30) step(s, { guard: true });
+    expect(i * DT).toBeLessThan(0.2);
   });
 });
