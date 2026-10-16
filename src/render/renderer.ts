@@ -132,8 +132,14 @@ export class Renderer {
     }
     if (f.debugContact) this.drawContactPanel(s);
     if (f.danger > 0) {
+      // small and beside the hero (world space, follows the shake): never over the HUD, hints or the building
       g.save(); g.globalAlpha = f.danger;
-      this.bigText('DANGER', GROUND_Y + 34, 26, '#ff6b5e');
+      g.translate(f.camera.x, f.camera.y + f.panY);
+      g.textAlign = 'left'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      g.font = '900 italic 20px "Arial Black", Impact, system-ui, sans-serif';
+      const dx = this.laneX(heroLanePos(s.player)) + 46, dy = headY(s) - 6;
+      g.lineWidth = 4; g.strokeStyle = '#1b1530'; g.strokeText('DANGER!', dx, dy);
+      g.fillStyle = '#ff6b5e'; g.fillText('DANGER!', dx, dy);
       g.restore();
     }
   }

@@ -47,7 +47,8 @@ canvas#view { position: absolute; inset: 0; width: 100%; height: 100%; display: 
   color: var(--ink); font-weight: 900; font-size: 18px; box-shadow: 0 3px 0 var(--ink); text-shadow: none; flex: 0 0 auto; }
 .icon-btn[aria-pressed="true"] { background: #8a86a3; text-decoration: line-through; }
 
-.hint { position: absolute; left: 50%; top: 92px; transform: translateX(-50%); max-width: min(92%, 640px); text-align: center;
+/* v4: hints sit low, just above the bottom bar — never over the building's underside, its lane chips or the hero's head */
+.hint { position: absolute; left: 50%; bottom: 46px; transform: translateX(-50%); max-width: min(92%, 640px); text-align: center; word-break: keep-all;
   background: rgba(20,16,40,.86); border: 2px solid var(--gold); border-radius: 999px; padding: 8px 18px; font-weight: 800; font-size: 16px;
   pointer-events: none; animation: hint-in .25s ease-out; }
 @keyframes hint-in { from { opacity: 0; transform: translate(-50%, -6px); } }
@@ -136,10 +137,13 @@ kbd { display: inline-block; padding: 0 .45em; margin: 0 .1em; border-radius: .3
   .combo { font-size: 22px; }
   #hearts svg { width: 24px; height: 22px; }
   .icon-btn { width: 40px; height: 40px; }
-  .hint { top: 76px; font-size: 13px; }
+  .hint { bottom: 40px; font-size: 13px; }
   .gauge { flex-basis: 60%; }
   .control-hints { display: none; }
   .where .next { display: none; }
+}
+@media (max-width: 440px) {
+  .where { display: none; } /* tier and landmark name are on the wave card; the score needs the room */
 }
 @media (max-height: 460px) {
   .control-hints { display: none; }
