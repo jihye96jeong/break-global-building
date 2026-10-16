@@ -590,8 +590,10 @@ function bind() {
   $('view').addEventListener('pointerdown', skip);
   addEventListener('resize', layout);
   addEventListener('orientationchange', () => setTimeout(layout, 150));
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { if (state.phase !== 'PAUSED') doPause(); audio.suspend(); } else audio.resume(); });
-  addEventListener('blur', () => { if (state.phase !== 'PAUSED') doPause(); });
+  // buried has no timer, so losing focus never needs the pause menu there: the hero just stays put until the player acts
+  const autoPause = () => { if (state.phase !== 'PAUSED' && state.phase !== 'BURIED') doPause(); };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { autoPause(); audio.suspend(); } else audio.resume(); });
+  addEventListener('blur', autoPause);
 }
 
 const worldMap = new WorldMap($('ov-map'), {
