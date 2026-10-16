@@ -6,7 +6,7 @@ import { BALANCE, DANGER_Y, GROUND_Y } from '../src/config/balance';
 import { CONTACT, GUARD_FEEL } from '../src/config/gameFeel';
 import { attack, attackSurfaceY, guardPlaneY, laneOverlap, NO_INPUT, special, sweptContact, takeEvents, tick, type GameEvent, type Intents, type RunState } from '../src/core/game';
 import type { HP } from '../src/core/building';
-import { building, floor, playing } from './helpers';
+import { building, CONTACT_Y as CONTACT_Y_T, floor, playing } from './helpers';
 
 const DT = 1 / 60;
 const tall = (n: number, hp: [HP, HP, HP] = [3, 3, 3], h = 40) => Array.from({ length: n }, (_, i) => floor(hp, i + 1, h));
@@ -381,6 +381,66 @@ describe('FLOW — after a break the building pops up a little and the hero land
     step(s, { attack: true, attackPressed: true });
     expect(s.phase).toBe('WAVE_TRANSITION');
     while (s.phase === 'WAVE_TRANSITION') step(s, { attack: true });
+    expect(s.phase).toBe('PLAYING');
+    expect(s.player.y).toBe(0);
+  });
+});
+
+describe('UP — ↑ always gets you up there fast', () => {
+  it('UP-01 holding ↑ jumps again the instant the hero lands (no pause)', () => {
+    const s = playing(building(tall(4), -3000)); // open sky
+    s.building!.baseSpeed = 0; s.building!.velocityY = 0;
+    let jumps = 0, lastLand = -1, gap = 99;
+    for (let i = 0; i < 200; i++) {
+      const ev = step(s, { jump: true, jumpPressed: i === 0 });
+      for (const e of ev) { if (e.t === 'land') lastLand = i; if (e.t === 'jump') { jumps++; if (lastLand >= 0) gap = Math.min(gap, i - lastLand); } }
+    }
+    expect(jumps).toBeGreaterThanOrEqual(2);
+    expect(gap).toBeLessThanOrEqual(1); // next jump on the landing tick or the one after
+  });
+
+  it('UP-02 after a floor breaks in the air, ↑ while dropping leaps straight back up to the building', () => {
+    const s = playing(building(tall(4, [1, 1, 1], 30), 150));
+    s.building!.baseSpeed = 0; s.building!.velocityY = 0;
+    step(s, { jump: true, jumpPressed: true });
+    for (let i = 0; i < 40 && attackSurfaceY(s) - s.building!.bottomY > 0.5; i++) step(s, { jump: true });
+    step(s, { attack: true, attackPressed: true }); // breaks a floor → the hero starts dropping
+    for (let i = 0; i < 5; i++) step(s);
+    const yDrop = s.player.y;
+    expect(s.player.vy).toBeLessThan(0);
+    expect(yDrop).toBeGreaterThan(50);
+    step(s, { jump: true, jumpPressed: true }); // ↑ in mid-air
+    let peak = 0, touched = false;
+    for (let i = 0; i < 40; i++) { step(s, { jump: true }); peak = Math.max(peak, s.player.y); if (attackSurfaceY(s) - s.building!.bottomY <= 2) touched = true; }
+    expect(peak).toBeGreaterThan(yDrop + 10);
+    expect(touched).toBe(true); // back up at the next floor without landing first
+  });
+
+  it('UP-03 a press up to 0.25 s before landing still jumps; ↑ while stuck under the building never drops the hero', () => {
+    const s = playing(building(tall(4), -3000));
+    s.building!.baseSpeed = 0; s.building!.velocityY = 0;
+    step(s, { jump: true, jumpPressed: true });
+    while (s.player.vy > 0 || s.player.y > 120) step(s); // falling, still well above the ground
+    step(s, { jumpPressed: true }); // early press, then let go
+    let jumped = false;
+    for (let i = 0; i < 30; i++) if (count(step(s), 'jump')) jumped = true;
+    expect(jumped).toBe(true);
+    const c = playing(building(tall(6), 200));
+    c.building!.baseSpeed = 0; c.building!.velocityY = 0;
+    step(c, { jump: true, jumpPressed: true });
+    for (let i = 0; i < 40 && !c.player.clinging; i++) step(c, { jump: true });
+    expect(c.player.clinging).toBe(true);
+    const y = c.player.y;
+    step(c, { jump: true, jumpPressed: true });
+    expect(c.player.y).toBeGreaterThanOrEqual(y - 0.01);
+  });
+
+  it('UP-04 holding ↑ between buildings never stalls the next one', () => {
+    const s = playing(building([floor([1, 1, 1], 1, 30)], CONTACT_Y_T));
+    attack(s); // clears the building
+    expect(s.phase).toBe('WAVE_TRANSITION');
+    let i = 0;
+    while (s.phase === 'WAVE_TRANSITION' && i++ < 200) step(s, { jump: true, jumpPressed: i % 10 === 0 });
     expect(s.phase).toBe('PLAYING');
     expect(s.player.y).toBe(0);
   });

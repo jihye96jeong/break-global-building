@@ -112,6 +112,7 @@ export interface PlayerState {
   guarding: boolean; // guard pose shown (↓ held / pressed, or bracing)
   clinging: boolean; // airborne and stuck to the building's underside
   dropping: boolean; // after an air guard: straight back down to the ground, no clinging
+  airLeap: boolean; // one ↑ re-leap allowed while dropping after a break / air guard
   clingMs: number;
 }
 
@@ -191,7 +192,7 @@ export interface RunState {
 export function newPlayer(): PlayerState {
   return { lane: 1, laneFrom: 1, laneAnimMs: 0, y: 0, vy: 0, peakY: 0, jumpElapsed: 0, jumpCut: false, jumpBufferMs: 0, landMs: 0,
     facing: 1, attackCooldownMs: 0, attackAnimMs: 0, bufferedAttackMs: 0, swingCount: 0, swing: null, moveRepeatMs: 0,
-    guarding: false, clinging: false, clingMs: 0, dropping: false };
+    guarding: false, clinging: false, clingMs: 0, dropping: false, airLeap: false };
 }
 
 export function newRun(seed: number): RunState {
@@ -305,6 +306,7 @@ function dropToGround(s: RunState, speed = JUMP_FEEL.landNowVelocity) {
   p.clinging = false;
   if (p.y <= 0) return;
   p.dropping = true;
+  p.airLeap = true; // ↑ can send the hero straight back up without landing first
   p.vy = Math.min(p.vy, -speed);
 }
 
@@ -592,18 +594,25 @@ function updateJump(s: RunState, dt: number, input: Intents) {
     const b = s.building;
     p.clingMs -= ms;
     const ceil = b && !b.defeated && !b.collisionDisabled ? Math.max(0, DANGER_Y - poseReach(s) - b.bottomY) : 0;
-    const keep = (p.clingMs > 0 || input.guard) && !input.jumpPressed && !p.dropping;
+    const keep = (p.clingMs > 0 || input.guard) && !p.dropping; // ↑ while stuck up there does nothing (never a drop)
     if (keep && ceil > 0 && p.y > 0) { p.y = ceil; p.vy = 0; p.peakY = Math.max(p.peakY, p.y); return; }
     p.clinging = false;
   }
 
-  if (p.y <= 0 && p.vy <= 0 && p.jumpBufferMs > 0) {
+  // jump: a fresh (or buffered) press, or ↑ still held on the ground — up again with no pause after landing
+  const grounded = p.y <= 0 && p.vy <= 0;
+  const wantsUp = p.jumpBufferMs > 0 || (input.jump && grounded);
+  // …and while dropping after a break / air guard, one ↑ sends the hero straight back up without landing first
+  const airLeap = !grounded && p.airLeap && p.vy <= 0 && p.jumpBufferMs > 0;
+  if ((grounded && wantsUp) || airLeap) {
     // no height limit but the building itself: with a building on screen above, the leap is always strong enough to
     // bring the blade right up to its underside (wherever it is); otherwise the normal ~204 wu jump
-    const need = jumpReachToBuilding(s);
+    const need = Math.max(0, jumpReachToBuilding(s) - p.y);
     const homing = need > 0; // a building on screen above: every jump reaches it (tap or hold)
-    p.vy = Math.max(JUMP_FEEL.jumpVelocity, homing ? Math.sqrt(2 * JUMP_FEEL.gravityAscending * (need + JUMP_FEEL.homingOvershoot)) : 0);
-    p.jumpElapsed = 0; p.jumpCut = homing; p.peakY = 0; p.jumpBufferMs = 0; // short hops only with open sky above
+    p.vy = homing ? Math.sqrt(2 * JUMP_FEEL.gravityAscending * (need + JUMP_FEEL.homingOvershoot)) : JUMP_FEEL.jumpVelocity;
+    if (grounded) p.vy = Math.max(JUMP_FEEL.jumpVelocity, p.vy);
+    if (airLeap) { p.airLeap = false; p.dropping = false; p.landMs = 0; }
+    p.jumpElapsed = 0; p.jumpCut = homing; p.peakY = Math.max(0, p.y); p.jumpBufferMs = 0; // short hops only with open sky above
     s.events.push({ t: 'jump', full: input.jump || homing });
   }
   if (p.y > 0 || p.vy > 0) {
@@ -613,7 +622,7 @@ function updateJump(s: RunState, dt: number, input: Intents) {
     p.y += p.vy * dt;
     if (p.y > p.peakY) p.peakY = p.y;
     if (p.y <= 0) {
-      p.y = 0; p.vy = 0; p.landMs = JUMP_FEEL.landingSquashMs; p.clinging = false; p.dropping = false;
+      p.y = 0; p.vy = 0; p.landMs = JUMP_FEEL.landingSquashMs; p.clinging = false; p.dropping = false; p.airLeap = false;
       s.events.push({ t: 'land', fromHeight: p.peakY });
     }
   }
@@ -670,6 +679,7 @@ function resolveGuardContact(s: RunState, prev: Snapshot, dt: number) {
     // CLANG — and the hero kicks off the underside straight back down to the ground (no staying up there)
     p.y = Math.max(0, GROUND_Y - BALANCE.heroHeight - GUARD_FEEL.guardReachAboveHead - contactY);
     p.vy = -JUMP_FEEL.airGuardDropVelocity;
+    p.airLeap = true;
     p.clinging = false; p.dropping = true;
   } else breakCombo(s);
   s.contact.lastEvent = 'GUARD_CONTACT';
@@ -860,7 +870,9 @@ export function tick(s: RunState, dt: number, input: Intents = NO_INPUT) {
       s.freezeMs = Math.max(0, s.freezeMs - ms);
       p.swing = null;
       updateLanes(s, ms, input);
-      updateJump(s, dt, input);
+      // the next building waits for the hero to land, so ↑ does not launch here (a press is still buffered)
+      updateJump(s, dt, { ...input, jump: false, jumpPressed: false });
+      if (input.jumpPressed) p.jumpBufferMs = JUMP_FEEL.jumpBuffer * 1000;
       updateGuardInput(s, input);
       if (input.attackPressed) p.bufferedAttackMs = CONTACT.attackBufferMs;
       if (s.phaseMs <= 0 && s.player.y <= 0) s.phase = 'PLAYING'; // the new building waits until the hero has landed

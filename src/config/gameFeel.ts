@@ -7,7 +7,7 @@ export const JUMP_FEEL = {
   gravityDescending: 2600,
   jumpCutVelocityFactor: 0.56, // release early → short hop
   jumpCutWindow: 0.2, // s
-  jumpBuffer: 0.11, // s: a press just before landing still jumps
+  jumpBuffer: 0.25, // s: a press just before landing still jumps (and holding ↑ jumps again on landing)
   landingSquashMs: 100,
   takeoffStretchMs: 100,
   clingMs: 300, // an airborne hero who reaches the underside sticks to it this long (and while Z or ↓ is held)
