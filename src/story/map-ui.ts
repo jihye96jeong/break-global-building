@@ -37,6 +37,8 @@ export class WorldMap {
   private nodes: HTMLButtonElement[] = [];
   private icons: HTMLImageElement[] = [];
   private goBtn!: HTMLButtonElement;
+  private prevBtn!: HTMLButtonElement;
+  private nextBtn!: HTMLButtonElement;
   private selected = 1;
   private progress!: StoryProgress;
 
@@ -114,7 +116,18 @@ export class WorldMap {
     const note = el('span', 'map-note');
     note.dataset.i18n = 'autosave';
     dock.append(this.panel, actions, note);
-    r.append(head, this.scroller, dock);
+    // on-screen arrows move the road a page at a time (no scrollbar)
+    const view = el('div', 'map-view');
+    this.prevBtn = el('button', 'map-arrow prev', '◀') as HTMLButtonElement;
+    this.nextBtn = el('button', 'map-arrow next', '▶') as HTMLButtonElement;
+    this.prevBtn.setAttribute('aria-label', 'Previous');
+    this.nextBtn.setAttribute('aria-label', 'Next');
+    this.prevBtn.addEventListener('click', () => this.page(-1));
+    this.nextBtn.addEventListener('click', () => this.page(1));
+    this.scroller.addEventListener('scroll', () => this.syncArrows(), { passive: true });
+    addEventListener('resize', () => this.syncArrows());
+    view.append(this.scroller, this.prevBtn, this.nextBtn);
+    r.append(head, view, dock);
     r.addEventListener('keydown', (e) => this.onKey(e));
   }
 
@@ -182,9 +195,22 @@ export class WorldMap {
     requestAnimationFrame(() => this.scrollTo(focus, !unlockedAnim));
   }
 
+  /** Slide the road by about one screen (dir −1 = toward the morning, +1 = toward the night). */
+  private page(dir: number) {
+    const sc = this.scroller;
+    sc.scrollTo({ left: Math.max(0, sc.scrollLeft + dir * Math.max(STEP, sc.clientWidth - STEP)), behavior: 'smooth' });
+  }
+
+  private syncArrows() {
+    const sc = this.scroller;
+    this.prevBtn.disabled = sc.scrollLeft <= 2;
+    this.nextBtn.disabled = sc.scrollLeft >= sc.scrollWidth - sc.clientWidth - 2;
+  }
+
   private scrollTo(level: number, instant: boolean) {
     const x = NODES[level - 1][0] - this.scroller.clientWidth * 0.5;
     this.scroller.scrollTo({ left: Math.max(0, x), behavior: instant ? 'auto' : 'smooth' });
+    this.syncArrows();
   }
 
   select(level: number, fromClick: boolean) {

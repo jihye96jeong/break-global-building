@@ -174,7 +174,18 @@ kbd { display: inline-block; padding: 0 .45em; margin: 0 .1em; border-radius: .3
 .logo-sm { font: 900 italic 22px "Arial Black", Impact, sans-serif; color: var(--gold); text-shadow: 0 3px 0 var(--ink); letter-spacing: .04em; }
 .map-sub { font-size: 12px; font-weight: 800; letter-spacing: .12em; opacity: .9; text-transform: uppercase; }
 .map-stars { font: 900 18px "Arial Black", sans-serif; color: var(--gold); text-shadow: 0 2px 0 var(--ink); white-space: nowrap; }
-.map-scroll { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: thin; overscroll-behavior-x: contain; }
+.map-view { position: relative; flex: 1; min-height: 0; display: flex; }
+.map-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; overscroll-behavior-x: contain; }
+.map-scroll::-webkit-scrollbar { display: none; }
+/* the arrows that move the road */
+.map-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 56px; height: 56px; border-radius: 50%;
+  border: 3px solid var(--ink); background: var(--cream); color: var(--ink); font-size: 22px; font-weight: 900; box-shadow: 0 4px 0 var(--ink);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; touch-action: manipulation; transition: opacity .2s; }
+.map-arrow.prev { left: 12px; padding-right: 3px; } .map-arrow.next { right: 12px; padding-left: 3px; }
+.map-arrow:active { transform: translateY(calc(-50% + 3px)); box-shadow: 0 1px 0 var(--ink); }
+.map-arrow:disabled { opacity: 0; pointer-events: none; }
+.map-arrow:focus-visible { outline: 3px dashed #fff; outline-offset: 3px; }
+@media (max-width: 640px) { .map-arrow { width: 46px; height: 46px; font-size: 18px; } .map-arrow.prev { left: 8px; } .map-arrow.next { right: 8px; } }
 .map-world { position: relative; height: 100%; min-height: 240px; overflow: hidden; border-top: 3px solid var(--ink); border-bottom: 3px solid var(--ink); }
 .map-sky-low { position: absolute; left: 0; right: 0; bottom: 0; height: 70%; pointer-events: none;
   -webkit-mask-image: linear-gradient(transparent, #000 85%); mask-image: linear-gradient(transparent, #000 85%); }
